@@ -1,5 +1,10 @@
 import datetime as d
 import typing as t
+
+# WGS84 constants
+# TODO: put them here?
+
+
 # Column header names as written in the postioning data csv files
 CHN_LAT = 'latitude'
 CHN_LON = 'longitude'
@@ -12,7 +17,7 @@ CHN_DEFAULTS = (CHN_LON, CHN_LAT, CHN_ALT, CHN_UTC, CHN_SAT)
 
 
 # Time intervals for which to calculate GDOP
-GDOP_INTERVAL = d.timedelta(seconds=30)
+GDOP_INTERVAL = d.timedelta(seconds=2)
 
 # TODO: write in proper struct format
 # Types of GDOP output 

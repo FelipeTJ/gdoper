@@ -229,3 +229,5 @@ if __name__ == '__main__':
   print(o.get_sats_pos())
   #o.get_sats_pos()
 
+
+# %%

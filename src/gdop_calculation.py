@@ -137,6 +137,29 @@ class FOV_simple:
 
     return isIn
 
+class FOV_no_calc:
+  """
+    Is based on the amount of satellites that the receiver sees
+  """
+  def __init__(self, u, n_sats) -> None:
+    self.u = np.array(u)
+    self.n_u = self.u/np.linalg.norm(self.u)
+    self.n_sats = int(n_sats)
+    self.sats = {}
+
+  def add_sat(self, pos, name):
+    # Add position to potential sats
+    n_p = pos/np.linalg.norm(pos)
+    self.sats[np.dot(self.n_u, n_p)] = name
+
+  def get_satellites(self) -> list:
+    visible = []
+    ordered = sorted(self.sats.keys(), key=np.abs, reverse=True)
+    #print(ordered)
+    for i in range(self.n_sats):
+      visible.append(self.sats[ordered[i]])
+    return visible
+
 
 class Gdop:
   def __init__(self, filename: str, output_file: str, fov: str = ""):
@@ -164,12 +187,13 @@ class Gdop:
     print()
 
   def lla2ecef_drone(self) -> tuple:
-    ecef = pp.Proj(proj='geocent', ellps='WGS84', datum='WGS84')
-    lla = pp.Proj(proj='latlong', ellps='WGS84', datum='WGS84')
-    lon = self.pos_data[c.CHN_LON][self.pos_index]
+    # https://epsg.io/4978 and http://epsg.io/4979
+    # WGS84 lat,lon,alt    and WGS84 ECEF
+    t = pp.Transformer.from_crs("epsg:4979", "epsg:4978") 
     lat = self.pos_data[c.CHN_LAT][self.pos_index]
+    lon = self.pos_data[c.CHN_LON][self.pos_index]
     alt = self.pos_data[c.CHN_ALT][self.pos_index]
-    return (pp.transform(lla, ecef, lon, lat, alt, radians=False))
+    return (t.transform(lat, lon, alt))
 
   def get_visible_sats(self) -> list:
     decef = self.lla2ecef_drone()
@@ -177,14 +201,17 @@ class Gdop:
     p.Print('info0', f'Drone ecef: {decef}')
 
     visible = []
-    fov = FOV_simple(decef)
+    #fov = FOV_simple(decef)
+    fov = FOV_no_calc(decef,self.measured_visible_sats)
 
     for sat in list(self.sat_poss.keys()):
       spos = self.sat_poss[sat]
-      nsat = spos/np.linalg.norm(spos)
+      #nsat = spos/np.linalg.norm(spos)
+      fov.add_sat(spos, sat)
+      #if fov.d_compare(nsat):
+      #  visible.append(sat)
 
-      if fov.d_compare(nsat):
-        visible.append(sat)
+    visible = fov.get_satellites()
 
     p.Print('info0',f'visible sats ({len(visible)}): {visible}')
     return visible
@@ -277,3 +304,5 @@ def test():
 if __name__ == '__main__':
   test()
   pass
+
+# %%
