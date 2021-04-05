@@ -1,5 +1,12 @@
+from pyproj.transformer import Transformer
 import datetime as d
 import typing as t
+import os
+
+BASE_FOLDER = os.path.dirname(os.path.abspath(__file__) )[:-4]
+RINEX_FOLDER = BASE_FOLDER + '/rinex_files'
+POS_DATA_FOLDER = BASE_FOLDER + '/test_data'
+
 
 # WGS84 constants
 # TODO: put them here?
@@ -27,8 +34,11 @@ GDOP_ONLY = 1
 # Angle from horizon for FOV mask (in degrees)
 LOS_ANGLE = 5
 
-# FOV model types
-FOV_CONSTANT = 0
-FOV_SEGMENTS = 1
-FOV_TERRAIN = 2
 
+# Functions
+
+def lla2ecef(lat, lon, alt) -> tuple:
+  # https://epsg.io/4978 and http://epsg.io/4979
+  # WGS84 lat,lon,alt    and WGS84 ECEF
+  t = Transformer.from_crs("epsg:4979", "epsg:4978")
+  return (t.transform(lat, lon, alt))

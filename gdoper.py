@@ -1,10 +1,10 @@
 ###############################################################################
-# Gdoper v1.0                                                                 #
+# Gdoper v2.0                                                                 #
 #     a GDOP calculating, automatic batch processing program                  #
 #
 # File:  gdoper.py
 # Author: Felipe Tampier Jara
-# Date:   1 Mar 2021
+# Date:   5 Apr 2021
 # Email:  felipe.tampierjara@tuni.fi
 #
 # Description:
@@ -26,23 +26,20 @@
 import os
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-from src import gdop_calculation as gc
+from src.calc_manager import Calc_manager
+from src.fov_models import FOV_view_match
+from src.calcs import Calc_gdop
 
-# Create DroneData object and return required columns
-def read_pos_file():
-  pass
-
-# Create Gdop object and return calculated GDOP for file
-def calc_gdop():
-  pass
 
 def test():
-  drone_data = '/test_data/test_data_full.csv'
-  output = drone_data[:-4] + "-gdop.csv"
 
-  gdop = gc.Gdop(drone_data, output)
+  drone_data = '/test_data_full.csv'
 
-  
+  gdoper = Calc_manager(drone_data, ts=10)  # ts is the sampling time from position data
+  gdoper.set_FOV(FOV_view_match())
+  gdoper.add_calc(Calc_gdop())
+  gdoper.process_data()
+
 
 if __name__ == '__main__':
   test()

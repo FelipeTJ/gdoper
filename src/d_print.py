@@ -1,9 +1,17 @@
 #%%
+import inspect as ins
+
+# TODO: file locations
+RINEX_FILES = ''
+DATA_FOLDER = ''
+
 
 # Colors
 CEND = '\033[0m'
 GREEN = '\033[32m'
 VIOLET = '\033[35m'
+
+
 
 def Print(level: str, text: str):
   if '0' in level or '#' in level:
@@ -11,7 +19,7 @@ def Print(level: str, text: str):
     
   info_type = ''
   if 'debug' in level:
-    info_type = '[DEBUG]'
+    info_type = f'[DEBUG] {ins.stack()[1].function}()'
   elif 'info' in level:
     info_type = '[INFO]'
   else:
@@ -28,3 +36,8 @@ def Print(level: str, text: str):
   print(f'{s}{info_type} {text}{e}')
 
 
+def Debug(msg):
+  print(f'[DEBUG] {ins.stack()[1].function}() {msg}')
+
+def Info(msg):
+  Print('info', msg)

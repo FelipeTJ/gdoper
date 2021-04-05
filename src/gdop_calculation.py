@@ -16,12 +16,14 @@
 
 # %%
 import datetime as dt
+from typing import Mapping
 import pyproj as pp
 import numpy as np
 import time
 import math
 import csv
 import os
+
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 import reader_pos_data as ddr
@@ -162,18 +164,19 @@ class FOV_no_calc:
 
 
 class Gdop:
-  def __init__(self, filename: str, output_file: str, fov: str = ""):
+  def __init__(self, filename: str, output_file: str, fov: str = "", t_s: float = 5):
+    # Calculation parameters
+    self.fov_model = fov
+    self.T_s = c.d.timedelta(seconds=t_s)        # Sampling period
+
+
     self.pos_index = 0
     self.pos_obj = ddr.PosData(filename)
     self.pos_data = self.pos_obj.get_merged_cols(c.CHN_DEFAULTS) # TODO: Change to dataset
     
-    # Calculation parameters
-    self.fov_model = fov
-
-
     #print(self.pos_data)
     self.sat_data = rr.Orbital_data(self.pos_data[c.CHN_UTC][self.pos_index])
-    self.sat_poss = self.sat_data.get_sats_pos()
+    self.sat_poss = self.sat_data.get_sats_pos([self.pos_obj.get_first_utc()]) # Deprecated
     self.measured_visible_sats = self.pos_data[c.CHN_SAT][self.pos_index]
     self.calculated_visible_sats = self.get_visible_sats()
     self.output_filename = output_file
@@ -222,6 +225,7 @@ class Gdop:
     decef = self.lla2ecef_drone()
 
     mat: np.array = []
+    # Calc vis sats is list of sat names
     for i in self.calculated_visible_sats:
       sat_p = self.sat_poss[i]
       d = lambda x: sat_p[x] - decef[x]
@@ -248,14 +252,14 @@ class Gdop:
     for i in range(1, self.pos_obj.row_count):
       self.pos_index = i
       new_date = dt.datetime.fromisoformat(self.pos_data[c.CHN_UTC][self.pos_index])
-      if new_date - self.sat_data.utc < c.GDOP_INTERVAL:
+      if new_date - self.sat_data.utc < self.T_s:
         p.Print('debug0',f'{p.VIOLET}new_date is too close ({new_date-self.sat_data.utc}){p.CEND}')
         gdops.append(0)
         inview.append(0)
         continue
       p.Print('\\debug',f'row: {i}')
       self.sat_data.change_date(new_date)
-      self.sat_poss = self.sat_data.get_sats_pos()
+      self.sat_poss = self.sat_data.get_sats_pos([new_date])
       self.measured_visible_sats = self.pos_data[c.CHN_SAT][self.pos_index]
       self.calculated_visible_sats = self.get_visible_sats()
       gdops.append(self.get_single_gdop())
