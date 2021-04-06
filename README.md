@@ -13,9 +13,10 @@ The following libraries must be installed for Gdoper to work:
 - pyproj
 - wget
 
+Note:
+The program has only been tested with Python 3.8.5
+
 Positioning data is by default stored in a directory named 'test_data', located in the same directory as the 'gdoper.py' file.
 
 Satellite data is by default stored in a file names 'rinex_files', which is also located in the same directory as the 'gdoper.py' file.
 
-Note:
-The program has only been tested with Python 3.8.5
