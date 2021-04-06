@@ -22,12 +22,12 @@ import datetime as dt
 import time
 
 
-import common as c
-import reader_rinex as rr
-import reader_pos_data as rpc
-from fov_models import FOV_model, FOV_view_match
-from calcs import Calc, Calc_gdop
-from d_print import Debug, Info
+import src.common as c
+import src.reader_rinex as rr
+import src.reader_pos_data as rpc
+from src.fov_models import FOV_model, FOV_view_match
+from src.calcs import Calc, Calc_gdop
+from src.d_print import Debug, Info
 
 
 

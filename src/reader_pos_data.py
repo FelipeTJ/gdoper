@@ -19,8 +19,8 @@ import csv
 import xarray as xr
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-from d_print import Debug,Info,Print
-import common as c
+from src.d_print import Debug,Info,Print
+import src.common as c
 
 os.chdir('..')  # gdoper.py directory
 
