@@ -38,7 +38,7 @@ class Pos_data():
   # TODO: Create setup function
   def setup(self):
     if not os.path.exists(self.filename):
-      raise Exception(f'requested data file "{self.filename}" does not exist.')
+      raise Exception(f'"{self.filename}" does not exist. Input full dir.')
     
     self.done_setup = True
     self.data = self.get_ordered_data()

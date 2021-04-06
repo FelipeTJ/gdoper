@@ -147,6 +147,9 @@ class Orbital_data:
       if self.utc.year == 1900:
         raise Exception('Setup needs an initial date to look for satellite data.')
 
+    if not os.path.exists(c.RINEX_FOLDER):
+      os.mkdir(c.RINEX_FOLDER)
+
     self.done_setup = True
 
     self.filedir_remote = self.get_remote_dir()

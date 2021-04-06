@@ -35,7 +35,7 @@ def test():
 
   drone_data = '/test_data_full.csv'
 
-  gdoper = Calc_manager(drone_data, ts=10)  # ts is the sampling time from position data
+  gdoper = Calc_manager(drone_data, ts=5)  # ts is the sampling time from position data
   gdoper.set_FOV(FOV_view_match())
   gdoper.add_calc(Calc_gdop())
   gdoper.process_data()
