@@ -3,7 +3,7 @@
 from typing import Tuple, List
 import numpy as np
 from numpy.core.fromnumeric import trace
-import common as c
+import src.common as c
 
 class Calc:
   def __init__(self):

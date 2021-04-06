@@ -29,9 +29,9 @@ import time
 import os
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-import common as c
-import unavco_stations as s
-from d_print import Print, Debug
+import src.common as c
+import src.unavco_stations as s
+from src.d_print import Print, Debug
 
 # TODO: create directory if it doesn't exist
 # Directory where downloaded rinex files are stored 
