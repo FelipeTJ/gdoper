@@ -104,7 +104,7 @@ class Satellite:
 
 
 class Orbital_data:
-  def __init__(self, utc):
+  def __init__(self, utc: str = '1900-01-01 00:00:00'):
     # Date parameters
     d_utc = dt.datetime.fromisoformat(utc)
     y_utc = d_utc.year
@@ -116,14 +116,18 @@ class Orbital_data:
     self.is_file_available = False
     self.station = DEFAULT_STATIONS[0]
     self.rinex_file = f'{self.station}{self.gps_day}0.{self.gps_year}n.Z'
-    self.filedir_remote = self.get_remote_dir()
-    self.filedir_local = self.get_file()        # TODO: Do not call before setup
+    self.filedir_remote = ''
+    self.filedir_local = ''
 
     # Dict containing all satellite objects
     self.sats: t.Dict[str, Satellite] = {}
-    self.read_rinex()
+
+    self.done_setup = False
+    self.debuging = 'none'
  
   def print_data(self):
+    self.setup_check()
+    
     print()
     Print('info',f'Variables for: {self}')
     for i in list(self.__dict__.keys()):
@@ -131,8 +135,29 @@ class Orbital_data:
     print()
 
   # TODO: Create setup function
-  def setup(self):
-    pass
+  def setup(self, utc: str = ''):
+    try:
+      d_utc = dt.datetime.fromisoformat(utc)
+
+      if d_utc.year >= 2000:
+        self.change_date(d_utc)
+      else:
+        raise Exception('Input date\'s year cannot be older than 2000')
+    except:
+      if self.utc.year == 1900:
+        raise Exception('Setup needs an initial date to look for satellite data.')
+
+    self.done_setup = True
+
+    self.filedir_remote = self.get_remote_dir()
+    self.filedir_local = self.get_file()
+    self.read_rinex()
+
+    #Debug('Done setup\n')
+
+  def setup_check(self):
+    if not self.done_setup: 
+      raise Exception('Orbital_data has not been set up.')
  
   def change_station(self, new_station: str):
     self.station = new_station
@@ -141,8 +166,7 @@ class Orbital_data:
     self.filedir_local = f'{c.RINEX_FOLDER}/{self.rinex_file}'
     self.is_file_available = False
 
-  def change_date(self, new_datetime: dt.datetime):
-    
+  def change_date(self, new_datetime: dt.datetime):        
     self.utc = (dt.datetime.fromisoformat(new_datetime) if (type(new_datetime) == str) else new_datetime)
     self.gps_year = self.utc.year - 2000
     self.gps_day = (self.utc - dt.datetime(self.utc.year, 1, 1)).days + 1  # Adjust for date
@@ -153,10 +177,12 @@ class Orbital_data:
     """
     Based on the date, return a string corresponding to the location
     of the station data in the remote file repository.
-    """
+    """  
     return f'{s.get_nav()}20{self.gps_year}/{self.gps_day}/' + self.rinex_file
 
   def local_file_exists(self) -> bool:
+    self.setup_check()
+    
     Print('debug0', f'local_file_exists()')
     for file in os.listdir(c.RINEX_FOLDER):
       # Check if file with same day exists
@@ -167,6 +193,8 @@ class Orbital_data:
     return False
 
   def get_file(self) -> str:
+    self.setup_check()
+    
     Print('debug0', f'get_file()')
     if not self.local_file_exists():
       downloaded = False
@@ -203,6 +231,8 @@ class Orbital_data:
     return f'{c.RINEX_FOLDER}/{self.rinex_file}'
 
   def read_rinex(self):
+    self.setup_check()
+    
     Print('debug0', f'read_rinex()')
     if not self.is_file_available:
       self.filedir_local = self.get_file()
@@ -232,6 +262,8 @@ class Orbital_data:
       Input a list of times for when to compute the positions of the satellites.
       Inputs can be either ISO formatted strings or datetime objects.
     """
+    self.setup_check()
+    
     Print('debug0', f'get_sats_pos()')
     if not self.is_file_available:
       self.read_rinex()
@@ -271,6 +303,7 @@ class Orbital_data:
 if __name__ == '__main__':
 
   o = Orbital_data('2019-07-10 07:25:31')
+  o.setup()
   o.print_data()
   #print("Results:\n",o.get_sats_pos(['2019-07-10 08:25:31', '2019-07-10 14:25:31']))
   o.get_sats_pos(['2019-07-10 08:25:31', '2019-07-10 14:25:31'])

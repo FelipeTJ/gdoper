@@ -4,8 +4,8 @@ import typing as t
 import os
 
 BASE_FOLDER = os.path.dirname(os.path.abspath(__file__) )[:-4]
-RINEX_FOLDER = BASE_FOLDER + '/rinex_files'
-POS_DATA_FOLDER = BASE_FOLDER + '/test_data'
+RINEX_FOLDER = BASE_FOLDER + os.sep + 'rinex_files'
+POS_DATA_FOLDER = BASE_FOLDER + os.sep + 'test_data'
 
 
 # WGS84 constants

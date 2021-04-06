@@ -19,43 +19,60 @@ import csv
 import xarray as xr
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-import d_print as p
+from d_print import Debug,Info,Print
 import common as c
 
-os.chdir('..')
+os.chdir('..')  # gdoper.py directory
 
 
-class PosData():
+class Pos_data():
   def __init__(self, filename):
     self.filename = filename
     self.var_count = 0
     self.row_count = 0
-    self.data = self.order_data()   # TODO: do not call before setup
-    p.Print('debug0', 'Done setup\n')
+    self.data = {}
+    self.done_setup = False
+    self.debuging = 'none'
+
 
   # TODO: Create setup function
   def setup(self):
-    pass
+    if not os.path.exists(self.filename):
+      raise Exception(f'requested data file "{self.filename}" does not exist.')
+    
+    self.done_setup = True
+    self.data = self.get_ordered_data()
+
+    #Debug('Done setup\n')
+
+  def setup_check(self):
+    if not self.done_setup: 
+      raise Exception('Pos_data has not been set up.')
 
 
-  def order_data(self) -> dict:
+  def get_ordered_data(self) -> dict:
+    self.setup_check()
+
     ordered = {}
     titles = []
     data = []
     titles, data = self.read_csv()
 
-    # Convert the mess read from csv to dataset
+    # Convert the rows of all data into columns with header names (transpose)
     for i in range(self.row_count):
       for j in range(self.var_count):
-        if titles[j] not in ordered.keys():
-          ordered[titles[j].strip()] = [data[i][j]]
+        chn = titles[j].strip()
+        if chn not in ordered.keys():
+          ordered[chn] = [data[i][j]]
         else:
-          ordered[titles[j]].append(data[i][j])
+          ordered[chn].append(data[i][j])
 
     return ordered
  
 
   def read_csv(self) -> c.t.Tuple[c.t.List[str], list]:
+    self.setup_check()
+
     titles = []
     data = []
 
@@ -70,9 +87,9 @@ class PosData():
           data.append(row)
         i += 1
 
-    p.Debug(f'name of file: {self.filename}')
-    p.Debug(f'amount of variables: {len(titles)}')
-    p.Debug(f'amount of data rows: {len(data)}')
+    #Debug(f'name of file: {self.filename}')
+    #Debug(f'amount of variables: {len(titles)}')
+    #Debug(f'amount of data rows: {len(data)}')
     self.var_count = len(titles)
     self.row_count = len(data)
 
@@ -80,24 +97,28 @@ class PosData():
 
 
   def get_col(self, col_name):
+    self.setup_check()
+
     if col_name in self.data.keys():
       return self.data[col_name]
     else:
-      p.Print('error', f'No such column with name {col_name} found.')
+      Print('error', f'No such column with name {col_name} found.')
       self.print_titles()
 
 
   def get_merged_cols(self, *cols) -> dict:
+    self.setup_check()
+
     if len(cols) == 1 and (type(cols[0]) == tuple or type(cols[0]) == list):
       cols = cols[0]
       
-    p.Print('debug0', f'Merging columns: {cols}')
+    Print('debug0', f'Merging columns: {cols}')
 
     #print(self.data[cols[0]])
     new_cols = {}
     for i in cols:
       if i not in self.data.keys():
-        p.Print('error', f'Variable \'{i}\' does not exist in this file.')
+        Print('error', f'Variable \'{i}\' does not exist in this file.')
         return
     
       new_cols[i] = self.get_col(i)
@@ -106,26 +127,33 @@ class PosData():
     return new_cols
 
 
-  def get_first_utc(self):
+  def get_first_utc(self) -> str:
     """
       Returns the first available date in the data
     """
+    self.setup_check()
+
     # TODO: make the column names more flexible
     return self.get_col(c.CHN_UTC)[0]
 
 
   def print_titles(self):
-    p.Print('info', 'Variable names:')
+    self.setup_check()
+
+    Print('info', 'Variable names:')
     for i in list(self.data.keys()):
-      p.Print('info', f' - {i}')
+      Print('info', f' - {i}')
     print()
 
 
 def test_run():
-  print(os.getcwd())
+  print('Current dir:',os.getcwd())
   print()
 
-  d = PosData('/test_data/test_data.csv')
+  test_file = c.POS_DATA_FOLDER + os.sep + 'test_data.csv'
+
+  d = Pos_data(test_file)
+  d.setup()
   d.print_titles()
   d.get_merged_cols('latitude', 'longitude', 'altitude_above_seaLevel(meters)', 'datetime(utc)', 'satellites')
   d.get_merged_cols(c.CHN_LON, c.CHN_LAT, c.CHN_ALT, c.CHN_UTC, c.CHN_SAT)

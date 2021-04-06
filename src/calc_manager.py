@@ -38,7 +38,7 @@ class Calc_manager:
               rinex_folder = c.RINEX_FOLDER,
               data_folder = c.POS_DATA_FOLDER,
               out_folder = c.POS_DATA_FOLDER,
-              ts = 2):
+              ts = 5):
 
     # Sampling period
     self.Ts = dt.timedelta(seconds=ts)
@@ -53,8 +53,8 @@ class Calc_manager:
     self.output_file = (in_file[:-4] + '_gdoper.csv' if out_file == '' else out_file)
 
     # Objects
-    self.pos_obj = rpc.PosData(self.pdata_dir + self.input_file)
-    self.sat_obj = rr.Orbital_data(self.pos_obj.get_first_utc())
+    self.pos_obj = rpc.Pos_data(self.pdata_dir + self.input_file)
+    self.sat_obj = rr.Orbital_data()
     self.fov_obj = FOV_model()      # real obj created in setup_FOV()
     self.calcs_q: List[Calc] = []   # A queue for calculations
     self.req_vars = set()           # The variables required by FOV_model and Calc
@@ -104,7 +104,7 @@ class Calc_manager:
 
     # Have readers check for existance of their files and folders
     self.pos_obj.setup()
-    self.sat_obj.setup()
+    self.sat_obj.setup(self.pos_obj.get_first_utc())
 
 
   def __sample_pos(self) -> Dict[str, list]:
@@ -206,6 +206,9 @@ class Calc_manager:
 
 
   def process_data(self):
+    """
+      Acquire relevant data, process, and output into csv format
+    """
     tot = time.perf_counter()
     now = time.perf_counter()
     Debug(f'Setting up...')
@@ -242,7 +245,8 @@ class Calc_manager:
     self.__output_to_file()
     Debug(f'Done. {time.perf_counter()-now:.3f}s\n')
 
-    Debug(f'Total runtime: {time.perf_counter() - tot:.3f}')
+    Debug(f'Total runtime: {time.perf_counter() - tot:.3f}'
+          + f' for {len(self.output_map[self.ordered_keys[0]])} output rows')
 
 
 
