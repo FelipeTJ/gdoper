@@ -18,5 +18,5 @@ The program has only been tested with Python 3.8.5
 
 Positioning data is by default stored in a directory named 'test_data', located in the same directory as the 'gdoper.py' file.
 
-Satellite data is by default stored in a file names 'rinex_files', which is also located in the same directory as the 'gdoper.py' file.
+Satellite data is by default stored in a file names 'rinex_files', which is also located in the same directory as the 'gdoper.py' file. This folder and its contents are created automatically as the program downloads satellite data (rinex files).
 
