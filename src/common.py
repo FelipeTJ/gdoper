@@ -7,6 +7,8 @@ BASE_FOLDER = os.path.dirname(os.path.abspath(__file__) )[:-4]
 RINEX_FOLDER = BASE_FOLDER + os.sep + 'rinex_files'
 POS_DATA_FOLDER = BASE_FOLDER + os.sep + 'test_data'
 
+GDOPER_SUFFIX = '_gdoper'
+
 
 # WGS84 constants
 # TODO: put them here?
