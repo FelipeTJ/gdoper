@@ -24,23 +24,40 @@
 
 #%%
 import os
+import sys
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 from src.calc_manager import Calc_manager
 from src.fov_models import FOV_view_match
 from src.calcs import Calc_gdop
 
+# TODO: implement parsing
+def parse_input() -> dict:
+  pass
 
 def test():
 
-  drone_data = '/test_data_full.csv'
+  drone_data = '50m-curve.csv'
+  r_rile = '/home/felipe/Documents/TUNI_thesis/Gdoper/rinex_files/metg0570.21d.Z'
+
+  gdoper = Calc_manager(drone_data, rinex_file=r_rile, ts=5)  # ts is the sampling time from position data
+  gdoper.set_FOV(FOV_view_match())
+  gdoper.add_calc(Calc_gdop())
+  gdoper.process_data()
+
+def default_test():
+  drone_data = '50m-curve.csv'
 
   gdoper = Calc_manager(drone_data, ts=5)  # ts is the sampling time from position data
   gdoper.set_FOV(FOV_view_match())
   gdoper.add_calc(Calc_gdop())
   gdoper.process_data()
 
+# TODO: implement batch processing
+def batch_process():
+  pass
+
 
 if __name__ == '__main__':
-  test()
+  default_test()
   pass

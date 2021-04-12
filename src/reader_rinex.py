@@ -104,7 +104,7 @@ class Satellite:
 
 
 class Orbital_data:
-  def __init__(self, utc: str = '1900-01-01 00:00:00'):
+  def __init__(self, utc: str = '1900-01-01 00:00:00', local_data = ''):
     # Date parameters
     d_utc = dt.datetime.fromisoformat(utc)
     y_utc = d_utc.year
@@ -115,9 +115,15 @@ class Orbital_data:
     # File name parameters
     self.is_file_available = False
     self.station = DEFAULT_STATIONS[0]
-    self.rinex_file = f'{self.station}{self.gps_day}0.{self.gps_year}n.Z'
+    self.rinex_file = f'{self.station}{self.gps_day:03}0.{self.gps_year}n.Z'
     self.filedir_remote = ''
-    self.filedir_local = ''
+    self.filedir_local = local_data
+
+    self.user_provided_rinex = False
+    if local_data != '':
+      self.user_provided_rinex = True
+      self.rinex_file = local_data[-14:]
+
 
     # Dict containing all satellite objects
     self.sats: t.Dict[str, Satellite] = {}
@@ -152,8 +158,14 @@ class Orbital_data:
 
     self.done_setup = True
 
+    if not self.user_provided_rinex:
+      self.filedir_local = self.get_file()
+    else:
+      self.change_rin_file(self.rinex_file)
+      Debug(f'User given local dir: {self.filedir_local}, {self.rinex_file}, {self.utc}')
+    
     self.filedir_remote = self.get_remote_dir()
-    self.filedir_local = self.get_file()
+
     self.read_rinex()
 
     #Debug('Done setup\n')
@@ -162,12 +174,25 @@ class Orbital_data:
     if not self.done_setup: 
       raise Exception('Orbital_data has not been set up.')
  
+  def change_rin_file(self, fn: str):
+    self.rinex_file = fn
+    self.filedir_local = c.RINEX_FOLDER + os.sep + fn
+    self.station = self.rinex_file[:4]
+
+    self.gps_day = int(self.rinex_file[5:7])
+    self.gps_year = int(self.rinex_file[-5:-3])
+    dt_dt = dt.datetime.strptime(f"{self.gps_day:03} {self.gps_year}", "%j %y")
+    self.utc = dt.date(dt_dt.year, dt_dt.month, dt_dt.day)
+
+    self.is_file_available = True
+    
   def change_station(self, new_station: str):
-    self.station = new_station
-    self.rinex_file = f'{self.station}{self.gps_day}0.{self.gps_year}n.Z'
-    self.filedir_remote = self.get_remote_dir()
-    self.filedir_local = f'{c.RINEX_FOLDER}/{self.rinex_file}'
-    self.is_file_available = False
+    if not self.user_provided_rinex:
+      self.station = new_station
+      self.rinex_file = f'{self.station}{self.gps_day:03}0.{self.gps_year}n.Z'
+      self.filedir_remote = self.get_remote_dir()
+      self.filedir_local = f'{c.RINEX_FOLDER}/{self.rinex_file}'
+      self.is_file_available = False
 
   def change_date(self, new_datetime: dt.datetime):        
     self.utc = (dt.datetime.fromisoformat(new_datetime) if (type(new_datetime) == str) else new_datetime)
@@ -181,7 +206,7 @@ class Orbital_data:
     Based on the date, return a string corresponding to the location
     of the station data in the remote file repository.
     """  
-    return f'{s.get_nav()}20{self.gps_year}/{self.gps_day}/' + self.rinex_file
+    return f'{s.get_nav()}20{self.gps_year}/{self.gps_day:03}/' + self.rinex_file
 
   def local_file_exists(self) -> bool:
     self.setup_check()
@@ -189,9 +214,9 @@ class Orbital_data:
     Print('debug0', f'local_file_exists()')
     for file in os.listdir(c.RINEX_FOLDER):
       # Check if file with same day exists
-      if file.endswith(self.rinex_file[4:]):
-        self.change_station(file[:4])
-        Print('debug0',f'File exists locally: {self.filedir_local}')
+      if self.rinex_file[4:11] in file:
+        self.change_rin_file(file)
+        Print('debug',f'File exists locally: {self.filedir_local}')
         return True
     return False
 
@@ -224,11 +249,12 @@ class Orbital_data:
         try:
           file = wget.download(url, out)
           if file == out:
-            Print('info', f'File downloaded successfully: {out}')
+            Print('info', f'\nFile downloaded successfully: {out}')
           downloaded = True
         
-        except:
+        except Exception as e:
           Print('info', f'Unable to download file: {url}')
+          Print('info', f'Error message: {e}')
     
     self.is_file_available = True
     return f'{c.RINEX_FOLDER}/{self.rinex_file}'
@@ -240,9 +266,9 @@ class Orbital_data:
     if not self.is_file_available:
       self.filedir_local = self.get_file()
 
-    # Read all the data from Rinex file
-    Print('info0', f'Reading Rinex file "{self.rinex_file}"...')
-    nav = gr.load(self.filedir_local)
+    # Read only GPS SVs from Rinex file
+    Print('info', f'Reading Rinex file "{self.rinex_file}"...')
+    nav = gr.load(self.filedir_local, use='G')
 
     now = time.perf_counter()
     # TODO: reset to normal operation (this is testing mode)
@@ -313,3 +339,5 @@ if __name__ == '__main__':
 
 
 # %%
+'ftp://data-out.unavco.org/pub/rinex/nav/2021/057/ac070570.21n.Z'
+'ftp://data-out.unavco.org/pub/rinex/nav/2021/57/ac70570.21n.Z'

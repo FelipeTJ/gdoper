@@ -20,6 +20,7 @@ from xarray import DataArray
 from csv import writer
 import datetime as dt
 import time
+import os
 
 
 import src.common as c
@@ -35,6 +36,7 @@ from src.d_print import Debug, Info
 class Calc_manager:
   def __init__(self, in_file,
               out_file = '',
+              rinex_file = '',
               rinex_folder = c.RINEX_FOLDER,
               data_folder = c.POS_DATA_FOLDER,
               out_folder = c.POS_DATA_FOLDER,
@@ -53,8 +55,8 @@ class Calc_manager:
     self.output_file = (in_file[:-4] + '_gdoper.csv' if out_file == '' else out_file)
 
     # Objects
-    self.pos_obj = rpc.Pos_data(self.pdata_dir + self.input_file)
-    self.sat_obj = rr.Orbital_data()
+    self.pos_obj = rpc.Pos_data(self.pdata_dir + os.sep +  self.input_file)
+    self.sat_obj = rr.Orbital_data(local_data=rinex_file)
     self.fov_obj = FOV_model()      # real obj created in setup_FOV()
     self.calcs_q: List[Calc] = []   # A queue for calculations
     self.req_vars = set()           # The variables required by FOV_model and Calc
@@ -189,7 +191,7 @@ class Calc_manager:
       File name is "self.out_dir + self.output_file"
     """
 
-    fn = self.out_dir + self.output_file
+    fn = self.out_dir + os.sep + self.output_file
     map_keys = self.ordered_keys
     row_count = len(self.output_map[map_keys[0]])
 
@@ -204,11 +206,20 @@ class Calc_manager:
 
         wr.writerow(temp) 
 
+  def print_dirs(self):
+    Debug(f'Calc_manager setup:')
+    Debug(f'sample time:\t{self.Ts}s')
+    Debug(f'input file:\t{self.pdata_dir + os.sep + self.input_file}')
+    Debug(f'output file:\t{self.out_dir + os.sep + self.output_file}\n')
+
+
 
   def process_data(self):
     """
       Acquire relevant data, process, and output into csv format
     """
+    self.print_dirs()
+
     tot = time.perf_counter()
     now = time.perf_counter()
     Debug(f'Setting up...')
