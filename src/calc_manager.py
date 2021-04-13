@@ -222,14 +222,14 @@ class Calc_manager:
 
     tot = time.perf_counter()
     now = time.perf_counter()
-    Debug(f'Setting up...')
+    #Debug(f'Setting up...')
     self.__setup()
-    Debug(f'Done. {time.perf_counter()-now:.3f}s\n')
+    #Debug(f'Done. {time.perf_counter()-now:.3f}s\n')
 
     now = time.perf_counter()
-    Debug(f'Sampling positions...')
+    #Debug(f'Sampling positions...')
     pos = self.__sample_pos()
-    Debug(f'Done. {time.perf_counter()-now:.3f}s\n')
+    #Debug(f'Done. {time.perf_counter()-now:.3f}s\n')
 
     # Add data used for calculation to output file
     for k in list(pos.keys()):
@@ -237,24 +237,24 @@ class Calc_manager:
         self.__add_to_output_map(k, pos[k])
 
     now = time.perf_counter()
-    Debug(f'Aquiring satellite info...')
+    #Debug(f'Aquiring satellite info...')
     all_sats = self.__acquire_sats(pos[c.CHN_UTC]) # TODO: make CHNs more flexible
     #Debug(f'Done. {time.perf_counter()-now:.3f}s\n')
 
     now = time.perf_counter()
-    Debug(f'Calculating visible satellites...')
+    #Debug(f'Calculating visible satellites...')
     los_sats = self.__sats_in_fov(pos, all_sats)
-    Debug(f'Done. {time.perf_counter()-now:.3f}s\n')
+    #Debug(f'Done. {time.perf_counter()-now:.3f}s\n')
 
     now = time.perf_counter()
-    Debug(f'Performing calculations...')
+    #Debug(f'Performing calculations...')
     self.__do_calcs(pos, los_sats)
-    Debug(f'Done. {time.perf_counter()-now:.3f}s\n')
+    #Debug(f'Done. {time.perf_counter()-now:.3f}s\n')
 
     now = time.perf_counter()
-    Debug(f'Writing to file...')
+    #Debug(f'Writing to file...')
     self.__output_to_file()
-    Debug(f'Done. {time.perf_counter()-now:.3f}s\n')
+    #Debug(f'Done. {time.perf_counter()-now:.3f}s\n')
 
     Debug(f'Total runtime: {time.perf_counter() - tot:.3f}'
           + f' for {len(self.output_map[self.ordered_keys[0]])} output rows')

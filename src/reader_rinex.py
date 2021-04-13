@@ -25,6 +25,7 @@ import numpy as np
 import pyproj as pp
 import typing as t
 import wget as wget
+import copy
 import time
 import os
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -58,6 +59,7 @@ class Satellite:
     if len(times) == 0:
       raise Exception('list of times cannot be empty.')
     mes_date = dt.date(times[0].year, times[0].month, times[0].day)
+    #Debug(f'Requesting pos for date: {mes_date}')
     if mes_date not in self.dates:
       raise Exception('Data for this date doesn\'t exist')
 
@@ -132,7 +134,7 @@ class Orbital_data:
     self.debuging = 'none'
  
   def print_data(self):
-    self.setup_check()
+    #self.setup_check()
     
     print()
     Print('info',f'Variables for: {self}')
@@ -179,11 +181,10 @@ class Orbital_data:
     self.filedir_local = c.RINEX_FOLDER + os.sep + fn
     self.station = self.rinex_file[:4]
 
-    self.gps_day = int(self.rinex_file[5:7])
+    self.gps_day = int(self.rinex_file[4:7])
     self.gps_year = int(self.rinex_file[-5:-3])
     dt_dt = dt.datetime.strptime(f"{self.gps_day:03} {self.gps_year}", "%j %y")
     self.utc = dt.date(dt_dt.year, dt_dt.month, dt_dt.day)
-
     self.is_file_available = True
     
   def change_station(self, new_station: str):
@@ -194,7 +195,8 @@ class Orbital_data:
       self.filedir_local = f'{c.RINEX_FOLDER}/{self.rinex_file}'
       self.is_file_available = False
 
-  def change_date(self, new_datetime: dt.datetime):        
+  def change_date(self, new_datetime: dt.datetime):    
+    #Debug(f'Current date: {self.utc}  -> {new_datetime}')    
     self.utc = (dt.datetime.fromisoformat(new_datetime) if (type(new_datetime) == str) else new_datetime)
     self.gps_year = self.utc.year - 2000
     self.gps_day = (self.utc - dt.datetime(self.utc.year, 1, 1)).days + 1  # Adjust for date
@@ -214,9 +216,10 @@ class Orbital_data:
     Print('debug0', f'local_file_exists()')
     for file in os.listdir(c.RINEX_FOLDER):
       # Check if file with same day exists
-      if self.rinex_file[4:11] in file:
+      #Debug(f'comparing self.rinex_file: {self.rinex_file[4:11]} vs {file[4:11]}')
+      if self.rinex_file[4:11] in file[4:11]:
         self.change_rin_file(file)
-        Print('debug',f'File exists locally: {self.filedir_local}')
+        Print('debug0',f'File exists locally: {self.filedir_local}')
         return True
     return False
 
@@ -267,14 +270,14 @@ class Orbital_data:
       self.filedir_local = self.get_file()
 
     # Read only GPS SVs from Rinex file
-    Print('info', f'Reading Rinex file "{self.rinex_file}"...')
+    Print('info0', f'Reading Rinex file "{self.rinex_file}"...')
     nav = gr.load(self.filedir_local, use='G')
 
     now = time.perf_counter()
     # TODO: reset to normal operation (this is testing mode)
-    for n in range(1, nav['sv'].size + 1):
-      sat = "G"+f'{n:02}'
-      #p.Print('\\debug',f'Satellite: {sat}')
+    for n in nav['sv']:
+      sat = np.array2string(n).strip('\'')
+      #Debug(f'Satellite: {sat}\t date: {self.utc}')
 
       # Create or add data to Satellite object at date of self.utc
       if sat not in self.sats.keys():
@@ -322,7 +325,7 @@ class Orbital_data:
       for t in times:
         results[t.isoformat(sep=' ')][prn] =  dr.sel(time=t).values
 
-    Print('debug\\',f'Done. ({time.perf_counter()-now:.3f}s for {len(self.sats)*len(times)} positions)')
+    Print('0debug\\',f'Done. ({time.perf_counter()-now:.3f}s for {len(self.sats)*len(times)} positions)')
 
     # Output order is:  times{} -> prn{} = (x,y,z)
 

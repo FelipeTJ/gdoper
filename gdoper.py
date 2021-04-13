@@ -28,6 +28,9 @@ import sys
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 import matplotlib.pyplot as plt
+import numpy as np
+import time
+
 import src.reader_pos_data as rps
 import datetime as dt
 from src.common import *
@@ -36,14 +39,38 @@ from src.calc_manager import Calc_manager
 from src.fov_models import FOV_view_match
 from src.calcs import Calc_gdop
 
+SAMPLING = 5
+SE = os.sep
+
 # TODO: implement parsing
 def parse_input() -> dict:
   sys.argv
   pass
 
-# TODO: implement batch processing
-def batch_process():
-  pass
+def single_gdoper(in_file, in_dir, out_dir):
+  gdoper = Calc_manager(in_file, data_folder=in_dir, out_folder=out_dir, ts=SAMPLING)
+  gdoper.set_FOV(FOV_view_match())
+  gdoper.add_calc(Calc_gdop())
+  gdoper.process_data()
+
+def batch_process(in_dir, out_dir, func):
+  if not os.path.exists(in_dir):
+      raise Exception(f'"{in_dir}" does not exist. Input full directory path')
+
+  start = time.perf_counter()
+
+  for file in os.listdir(in_dir):
+    func(file, in_dir, out_dir)
+
+  end = time.perf_counter()
+
+  print(f'\nTotal processing time: {end-start:.2f}s')
+
+
+
+
+
+
 
 def local_file_test(in_file):
 
@@ -55,7 +82,6 @@ def local_file_test(in_file):
   gdoper.add_calc(Calc_gdop())
   gdoper.process_data()
 
-
 def default_test(in_file):
   drone_data = in_file
 
@@ -64,9 +90,10 @@ def default_test(in_file):
   gdoper.add_calc(Calc_gdop())
   gdoper.process_data()
 
+def plotting_test(in_file, in_dir=POS_DATA_FOLDER, out_dir=POS_DATA_FOLDER):
 
-def plotting_test(in_file):
-  drone_data = POS_DATA_FOLDER + os.sep + in_file[:-4] + '_gdoper.csv'
+  drone_data = in_dir + SE + in_file
+  out_file = out_dir + SE + in_file[:-4]
   
   r = rps.Pos_data(drone_data)
   r.setup()
@@ -97,11 +124,11 @@ def plotting_test(in_file):
 
   ax.view_init(elev=30, azim=-55)
 
-  fn = drone_data[:-11] + '_plot_path'
+  fn = out_file + '_plot_path'
 
   plt.title('Path followed by drone', pad=2.0)
   plt.savefig(fn, format='pdf')
-  plt.show()
+  #plt.show()
 
 
   """        GDOP and sats plot           """
@@ -124,25 +151,84 @@ def plotting_test(in_file):
   ax2.plot(t, v, label='VDOP')
   ax2.plot(t, h, label='HDOP')
 
-  ax1.legend()
+  ax1.legend(loc='best')
   ax1.set_xlim(-5,t[-1]+5)
   ax1.set_xlabel('Seconds')
+  ax1.set_ylim(10,25)
 
   ax2.legend()
   ax2.set_xlim(-5,t[-1]+5)
   ax2.set_xlabel('Seconds')
+  ax2.set_ylim(0.1,2)
 
-  fn = drone_data[:-11] + '_plot_DOPS'
+  fn = out_file + '_plot_DOPS'
 
   plt.savefig(fn, format='pdf')
-  plt.show()
+  #plt.show()
+
+def sats2gdop_getter(in_file, in_dir, out_dir, d):
+
+  drone_data = in_dir + SE + in_file
+  
+  r = rps.Pos_data(drone_data)
+  r.setup()
+
+  data = r.get_merged_cols(CHN_SAT, 'GDOP')#, 'HDOP', 'VDOP')
+
+  for i in range(len(data['GDOP'])):
+
+    n_vis_sats = data[CHN_SAT][i]
+    if n_vis_sats not in d.keys():
+      d[n_vis_sats] = [float(data['GDOP'][i])]
+    else:
+      d[n_vis_sats].append(float(data['GDOP'][i]))
 
 
+def sats2gdop_ratio(in_dir, out_dir):
+  """    Number of sats to GDOP ratio    """
 
+  if not os.path.exists(in_dir):
+      raise Exception(f'"{in_dir}" does not exist. Input full directory path')
+
+  start = time.perf_counter()
+
+  out_file = out_dir + SE + 'sats2gdop_ratio'
+
+  vis_sats = {}
+
+  for file in os.listdir(in_dir):
+    sats2gdop_getter(file, in_dir, out_dir, vis_sats)
+
+  x = sorted(list(vis_sats.keys()))
+  its = [vis_sats[i] for i in x]
+  y = [np.mean(i) for i in its]
+  er = [np.var(i, ddof=1) for i in its]
+
+  fig, ax = plt.subplots()
+
+  ax.bar(x, y, yerr=er, capsize=3)
+  ax.set_title('GDOP vs Number of visible satellites',pad=10.0)
+  ax.set_ylabel('Mean GDOP value')
+  ax.set_xlabel('Satellites in view')
+
+  #plt.show()
+  plt.savefig(out_file, format='pdf')
+  
+  end = time.perf_counter()
+  print(f'\nTotal processing time: {end-start:.2f}s')
+  pass
 
 
 
 if __name__ == '__main__':
-  plotting_test('50m-curve.csv')
+  #plotting_test('50m-curve.csv')
+  #default_test('test_data_full.csv')
+
+  f_in = BASE_FOLDER + SE + 'Tampere_flights'
+  f_out = f_in + '_gdoper'
+
+  #batch_process(f_in, f_out, single_gdoper)
+  #batch_process(f_out, BASE_FOLDER + SE + 'Tampere_plots', plotting_test)
+  sats2gdop_ratio(f_out, BASE_FOLDER + SE + 'Tampere_plots')
 
   pass
