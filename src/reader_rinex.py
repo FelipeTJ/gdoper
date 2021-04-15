@@ -32,7 +32,7 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 import src.common as c
 import src.unavco_stations as s
-from src.d_print import Print, Debug
+from src.d_print import Info, Debug, Stats, Set_PrintLevel, RED, CEND
 
 # TODO: create directory if it doesn't exist
 # Directory where downloaded rinex files are stored 
@@ -51,8 +51,8 @@ class Satellite:
     self.prn = prn
     self.dates = [date]
     self.gps_data = {self.dates[0]: gps_data}
-    Print('debug0', f'Created Satellite object (PRN: {prn})')
-    Print('debug0', f'data: {self.gps_data[self.dates[0]]["time"]}')
+    Debug(3, f'Created Satellite object (PRN: {prn})')
+    Debug(3, f'data: {self.gps_data[self.dates[0]]["time"]}')
 
 
   def get_position(self, times: t.List[dt.datetime] = []):
@@ -66,27 +66,27 @@ class Satellite:
     # Select the nearest recorded NAV message 
     close_nav = self.gps_data[mes_date].sel(time=times, method='nearest')
 
-    Print('\\debug0', f'Satellite PRN: {self.prn}')
-    Print('\\debug0', f'NAV GPS message from times:')
+    Debug(3, f'Satellite PRN: {self.prn}')
+    Debug(3, f'NAV GPS message from times:')
     for i in close_nav["time"].values:
-      Print('debug0', f'- {i}')
+      Debug(3, f'- {i}')
 
-    Print('\\debug0', f'Requested compute at times:')
+    Debug(3, f'Requested compute at times:')
     for i in times:
-      Print('debug0', f'- {i}')
+      Debug(3, f'- {i}')
 
     # Get the time of the NAV message
     td = close_nav["time"].values.astype('datetime64[us]').astype(dt.datetime)
 
-    Print('\\debug0', f'Difference between NAV message and requested times (- before, + after NAV):')
+    Debug(3, f'Difference between NAV message and requested times (- before, + after NAV):')
     for i,j in zip(times, td):
       dif = i-j
       if dif < dt.timedelta(days=0):
-        Print('debug0', f' -{-dif}')
+        Debug(3, f' -{-dif}')
       else:
-        Print('debug0', f' +{dif}')
+        Debug(3, f' +{dif}')
 
-    Print('\\0debug', f'After: {close_nav}')
+    Debug(3, f'After: {close_nav}')
 
     ecef = gr.keplerian.keplerian2ecef(close_nav)
 
@@ -99,7 +99,7 @@ class Satellite:
     if not self.has_date(datetime):
       self.gps_data[datetime.date] = gps_data
     else:
-       Print('debug', f'Data for {datetime.date} already exists.')
+       Debug(1,  f'Data for {datetime.date} already exists.')
 
   def has_date(self, date: dt.date) -> bool:
     return date in self.gps_data.keys()
@@ -131,15 +131,14 @@ class Orbital_data:
     self.sats: t.Dict[str, Satellite] = {}
 
     self.done_setup = False
-    self.debuging = 'none'
  
   def print_data(self):
     #self.setup_check()
     
     print()
-    Print('info',f'Variables for: {self}')
+    Info(f'Variables for: {self}')
     for i in list(self.__dict__.keys()):
-      Print('info',f' - {i:15} : {(self.__dict__[i] if type(self.__dict__[i]) != dict else "<dict>")}')
+      Info(f' - {i:15} : {(self.__dict__[i] if type(self.__dict__[i]) != dict else "<dict>")}')
     print()
 
   # TODO: Create setup function
@@ -213,25 +212,31 @@ class Orbital_data:
   def local_file_exists(self) -> bool:
     self.setup_check()
     
-    Print('debug0', f'local_file_exists()')
+    Debug(3, f'local_file_exists()')
     for file in os.listdir(c.RINEX_FOLDER):
       # Check if file with same day exists
       #Debug(f'comparing self.rinex_file: {self.rinex_file[4:11]} vs {file[4:11]}')
       if self.rinex_file[4:11] in file[4:11]:
         self.change_rin_file(file)
-        Print('debug0',f'File exists locally: {self.filedir_local}')
+
+        gd_p = self.filedir_local.find("Gdoper")
+        if gd_p != -1:
+          Debug(1, f'File exists locally: {self.filedir_local[gd_p-1:]}', True)
+        else:
+          Debug(1, f'File exists locally: {self.filedir_local}', True)
+
         return True
     return False
 
   def get_file(self) -> str:
     self.setup_check()
     
-    Print('debug0', f'get_file()')
+    Debug(3, f'get_file()')
     if not self.local_file_exists():
       downloaded = False
       tries = 0
       while not downloaded:
-        Print('info', f'Downloading...')
+        Info(f'Downloading...')
 
         # If current station is unavailable at self.utc: try other stations
         if 1 <= tries and tries < len(DEFAULT_STATIONS):
@@ -245,19 +250,20 @@ class Orbital_data:
         url = f'ftp://{s.get_url()}{self.filedir_remote}'
         out = f'{c.RINEX_FOLDER}/{self.rinex_file}'
 
-        Print('debug', f'Remote URL: {url}')
-        Print('debug', f'Local dir: {out}')
+        Debug(0, f'Remote URL: {url}')
+        Debug(0, f'Local dir: {out}')
 
         tries = tries+1
         try:
           file = wget.download(url, out)
           if file == out:
-            Print('info', f'\nFile downloaded successfully: {out}')
+            print()
+            Info(f'File downloaded successfully: {out}')
           downloaded = True
         
         except Exception as e:
-          Print('info', f'Unable to download file: {url}')
-          Print('info', f'Error message: {e}')
+          Info(f'Unable to download file: {url}')
+          Info(f'Error message: {e}')
     
     self.is_file_available = True
     return f'{c.RINEX_FOLDER}/{self.rinex_file}'
@@ -265,12 +271,12 @@ class Orbital_data:
   def read_rinex(self):
     self.setup_check()
     
-    Print('debug0', f'read_rinex()')
+    Debug(3, f'read_rinex()')
     if not self.is_file_available:
       self.filedir_local = self.get_file()
 
     # Read only GPS SVs from Rinex file
-    Print('info0', f'Reading Rinex file "{self.rinex_file}"...')
+    Debug(2,f'Reading Rinex file "{self.rinex_file}"...')
     nav = gr.load(self.filedir_local, use='G')
 
     now = time.perf_counter()
@@ -287,7 +293,7 @@ class Orbital_data:
       else:
         pass
 
-    Print('info\\0',f'Done. ({time.perf_counter()-now:.3f}s for {len(self.sats)} satellites)')
+    Stats(2,f'Done. ({time.perf_counter()-now:.3f}s for {len(self.sats)} satellites)')
 
   def get_sats_pos(self, time_list: List[dt.datetime]) -> Mapping[str, Mapping[str, Tuple[float, float, float]]]:
     """
@@ -296,12 +302,12 @@ class Orbital_data:
     """
     self.setup_check()
     
-    Print('debug0', f'get_sats_pos()')
+    Debug(3, f'get_sats_pos()')
     if not self.is_file_available:
       self.read_rinex()
     
     if len(self.sats) == 0:
-      Print('\\error\\', f'[get_sats_pos] No Satellite objects in this instance (no file has been read yet)')
+      Debug(-1, f'{RED}No Satellite objects in this instance (no file has been read yet){CEND}')
       return
 
     times = time_list.copy()
@@ -312,7 +318,7 @@ class Orbital_data:
           times[i] = dt.datetime.fromisoformat(times[i])
 
     now = time.perf_counter()
-    Print('info0', f'Calculating satellite positions for "{self.utc.year}-{self.utc.month}-{self.utc.day}"...')
+    Debug(2, f'Calculating satellite positions for "{self.utc.year}-{self.utc.month}-{self.utc.day}"...')
 
     results = {}
     for t in time_list:
@@ -325,7 +331,7 @@ class Orbital_data:
       for t in times:
         results[t.isoformat(sep=' ')][prn] =  dr.sel(time=t).values
 
-    Print('0debug\\',f'Done. ({time.perf_counter()-now:.3f}s for {len(self.sats)*len(times)} positions)')
+    Stats(2,f'Done. ({time.perf_counter()-now:.3f}s for {len(self.sats)*len(times)} positions)')
 
     # Output order is:  times{} -> prn{} = (x,y,z)
 

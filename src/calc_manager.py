@@ -28,7 +28,7 @@ import src.reader_rinex as rr
 import src.reader_pos_data as rpc
 from src.fov_models import FOV_model, FOV_view_match
 from src.calcs import Calc, Calc_gdop
-from src.d_print import Debug, Info
+from src.d_print import Debug, Info, Set_PrintLevel
 
 
 
@@ -40,19 +40,20 @@ class Calc_manager:
               rinex_folder = c.RINEX_FOLDER,
               data_folder = c.POS_DATA_FOLDER,
               out_folder = c.POS_DATA_FOLDER,
-              ts = 5):
+              ts = 5,
+              debug = -1):
 
     # Sampling period
     self.Ts = dt.timedelta(seconds=ts)
 
     # Directories
-    self.rinex_dir = rinex_folder
-    self.pdata_dir = data_folder
-    self.out_dir = out_folder
+    self.rinex_dir: str = rinex_folder
+    self.pdata_dir: str = data_folder
+    self.out_dir: str = out_folder
 
     # File names
-    self.input_file = in_file
-    self.output_file = (in_file[:-4] + '_gdoper.csv' if out_file == '' else out_file)
+    self.input_file: str = in_file
+    self.output_file: str = (in_file[:-4] + '_gdoper.csv' if out_file == '' else out_file)
 
     # Objects
     self.pos_obj = rpc.Pos_data(self.pdata_dir + os.sep +  self.input_file)
@@ -64,6 +65,9 @@ class Calc_manager:
     # Processed data
     self.output_map: Dict[str, list] = {}
     self.ordered_keys: List[str]        = []
+
+    # Debug level for this class
+    self.debug = int(debug)
   
 
   def set_FOV(self, model: FOV_model) -> None:
@@ -207,10 +211,21 @@ class Calc_manager:
         wr.writerow(temp) 
 
   def print_dirs(self):
-    Debug(f'Calc_manager setup:')
-    Debug(f'sample time:\t{self.Ts}s')
-    Debug(f'input file:\t{self.pdata_dir + os.sep + self.input_file}')
-    Debug(f'output file:\t{self.out_dir + os.sep + self.output_file}\n')
+    Info(f'Calc_manager setup:')
+    Info(f'- sample time:\t{self.Ts}s')
+    gd_p = self.pdata_dir.find("Gdoper")
+    if gd_p != -1:
+      Info(f'- input file:\t{self.pdata_dir[gd_p-1:] + os.sep + self.input_file}')
+    else:
+
+      Info(f'- input file:\t{self.pdata_dir + os.sep + self.input_file}')
+
+    gd_po = self.out_dir.find("Gdoper")
+    if gd_po != -1:
+      Info(f'- output file:\t{self.out_dir[gd_po-1:] + os.sep + self.output_file}\n')
+    else:
+      Info(f'- output file:\t{self.out_dir + os.sep + self.output_file}\n')
+
 
 
 
@@ -219,17 +234,18 @@ class Calc_manager:
       Acquire relevant data, process, and output into csv format
     """
     self.print_dirs()
+    Set_PrintLevel(self.debug)
 
     tot = time.perf_counter()
     now = time.perf_counter()
-    #Debug(f'Setting up...')
+    Debug(1, f'Setting up...')
     self.__setup()
-    #Debug(f'Done. {time.perf_counter()-now:.3f}s\n')
+    Debug(1, f'Done. {time.perf_counter()-now:.3f}s\n')
 
     now = time.perf_counter()
-    #Debug(f'Sampling positions...')
+    Debug(1, f'Sampling positions...')
     pos = self.__sample_pos()
-    #Debug(f'Done. {time.perf_counter()-now:.3f}s\n')
+    Debug(1, f'Done. {time.perf_counter()-now:.3f}s\n')
 
     # Add data used for calculation to output file
     for k in list(pos.keys()):
@@ -237,26 +253,26 @@ class Calc_manager:
         self.__add_to_output_map(k, pos[k])
 
     now = time.perf_counter()
-    #Debug(f'Aquiring satellite info...')
+    Debug(1, f'Aquiring satellite info...')
     all_sats = self.__acquire_sats(pos[c.CHN_UTC]) # TODO: make CHNs more flexible
-    #Debug(f'Done. {time.perf_counter()-now:.3f}s\n')
+    Debug(1, f'Done. {time.perf_counter()-now:.3f}s\n')
 
     now = time.perf_counter()
-    #Debug(f'Calculating visible satellites...')
+    Debug(1, f'Calculating visible satellites...')
     los_sats = self.__sats_in_fov(pos, all_sats)
-    #Debug(f'Done. {time.perf_counter()-now:.3f}s\n')
+    Debug(1, f'Done. {time.perf_counter()-now:.3f}s\n')
 
     now = time.perf_counter()
-    #Debug(f'Performing calculations...')
+    Debug(1, f'Performing calculations...')
     self.__do_calcs(pos, los_sats)
-    #Debug(f'Done. {time.perf_counter()-now:.3f}s\n')
+    Debug(1, f'Done. {time.perf_counter()-now:.3f}s\n')
 
     now = time.perf_counter()
-    #Debug(f'Writing to file...')
+    Debug(1, f'Writing to file...')
     self.__output_to_file()
-    #Debug(f'Done. {time.perf_counter()-now:.3f}s\n')
+    Debug(1, f'Done. {time.perf_counter()-now:.3f}s\n')
 
-    Debug(f'Total runtime: {time.perf_counter() - tot:.3f}'
+    Info(f'Total runtime: {time.perf_counter() - tot:.3f}'
           + f' for {len(self.output_map[self.ordered_keys[0]])} output rows')
 
 

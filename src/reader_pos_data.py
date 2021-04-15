@@ -87,9 +87,9 @@ class Pos_data():
           data.append(row)
         i += 1
 
-    #Debug(f'name of file: {self.filename}')
-    #Debug(f'amount of variables: {len(titles)}')
-    #Debug(f'amount of data rows: {len(data)}')
+    #Debug(1,f'name of file: {self.filename}')
+    #Debug(1,f'amount of variables: {len(titles)}')
+    #Debug(1,f'amount of data rows: {len(data)}')
     self.var_count = len(titles)
     self.row_count = len(data)
 
@@ -112,9 +112,7 @@ class Pos_data():
     if len(cols) == 1 and (type(cols[0]) == tuple or type(cols[0]) == list):
       cols = cols[0]
       
-    Print('debug0', f'Merging columns: {cols}')
-
-    #print(self.data[cols[0]])
+    Debug(2,f'Merging columns: {cols}')
     new_cols = {}
     for i in cols:
       if i not in self.data.keys():
@@ -123,7 +121,7 @@ class Pos_data():
     
       new_cols[i] = self.get_col(i)
 
-    #print("new_cols:\n",new_cols)
+    Debug(3,f'new_cols: {new_cols}')
     return new_cols
 
 
@@ -140,9 +138,9 @@ class Pos_data():
   def print_titles(self):
     self.setup_check()
 
-    Print('info', 'Variable names:')
+    Info('Variable names:')
     for i in list(self.data.keys()):
-      Print('info', f' - {i}')
+      Info(f' - {i}')
     print()
 
 
