@@ -36,7 +36,7 @@ class Calc_gdop(Calc):
   def do_calc(self, pos_pos, sats_FOV) -> Tuple[str, list]:
     # sats_FOV is ordered like:  times{} -> prn{} = (x,y,z)
 
-    results = {'HDOP': [], 'VDOP': [], 'GDOP': []}
+    results = {'HDOP': [], 'VDOP': [], 'GDOP': [], 'satellites':[]}  # TODO: Add unique calculation signature to names
 
     for i in range(len(pos_pos[c.CHN_UTC])):
       t = pos_pos[c.CHN_UTC][i]
@@ -62,6 +62,7 @@ class Calc_gdop(Calc):
       T = [Q[0][0], Q[1][1], Q[2][2], Q[3][3]]
       hdop = np.sqrt(T[0]**2 + T[1]**2)
       
+      results['satellites'].append(len(mat))
       results['HDOP'].append(hdop)
       results['VDOP'].append(T[2])
       results['GDOP'].append(np.sqrt(np.trace(Q)))

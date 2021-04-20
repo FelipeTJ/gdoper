@@ -116,7 +116,7 @@ class Pos_data():
     new_cols = {}
     for i in cols:
       if i not in self.data.keys():
-        Print('error', f'Variable \'{i}\' does not exist in this file.')
+        raise Exception(f'Variable \'{i}\' does not exist in this file.')
         return
     
       new_cols[i] = self.get_col(i)

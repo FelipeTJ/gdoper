@@ -86,6 +86,14 @@ class Calc_manager:
     else:
       self.calcs_q.append(calc)
 
+  def __reset(self) -> None:
+    """
+      Reset the local variables so new computations can be made
+    """
+    self.output_map.clear()
+    self.ordered_keys.clear()
+    self.req_vars.clear()
+
 
   def __setup(self) -> None:
     """
@@ -94,6 +102,9 @@ class Calc_manager:
     if self.fov_obj == FOV_model():
       raise Exception("FOV_model is the base class, it cannot be used.\
                       Select an inherited model.")
+
+    if not self.fov_obj.is_setup:
+      raise Exception("FOV_model has not been setup.")
     
     if len(self.calcs_q) == 0:
       raise Exception("No calculations have been queued.\
@@ -138,6 +149,10 @@ class Calc_manager:
 
         # Add samples from this index
         for chn in chn_keys:
+          # Do not sample invalid values
+          if chn == c.CHN_LAT and all_pos[chn][i] == '0': continue
+          if chn == c.CHN_LON and all_pos[chn][i] == '0': continue
+
           sampled[chn].append(all_pos[chn][i])
         
         last_saved = last_saved + dif
@@ -236,6 +251,8 @@ class Calc_manager:
     self.print_dirs()
     Set_PrintLevel(self.debug)
 
+    self.__reset()
+
     tot = time.perf_counter()
     now = time.perf_counter()
     Debug(1, f'Setting up...')
@@ -273,7 +290,7 @@ class Calc_manager:
     Debug(1, f'Done. {time.perf_counter()-now:.3f}s\n')
 
     Info(f'Total runtime: {time.perf_counter() - tot:.3f}'
-          + f' for {len(self.output_map[self.ordered_keys[0]])} output rows')
+          + f' for {len(self.output_map[self.ordered_keys[0]])} output rows\n')
 
 
 
