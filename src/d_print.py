@@ -17,7 +17,7 @@ PrintLevel = 0
 
 def Set_PrintLevel(lvl):
   global PrintLevel
-  PrintLevel = lvl
+  PrintLevel = int(lvl)
 
 def Print(level: str, text: str):
   if '0' in level or '#' in level:
