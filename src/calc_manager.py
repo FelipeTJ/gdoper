@@ -67,7 +67,7 @@ class Calc_manager:
     self.ordered_keys: List[str]        = []
 
     # Debug level for this class
-    self.debug = int(debug)
+    self.__debug = int(debug)
   
 
   def set_FOV(self, model: FOV_model) -> None:
@@ -249,7 +249,7 @@ class Calc_manager:
       Acquire relevant data, process, and output into csv format
     """
     self.print_dirs()
-    Set_PrintLevel(self.debug)
+    Set_PrintLevel(self.__debug)
 
     self.__reset()
 

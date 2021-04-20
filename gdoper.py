@@ -40,22 +40,23 @@ if __name__ == '__main__':
   #fov_test('test_data.csv',15)
 
   # Input and output directories for Gdoper processing
-  input_dir = BASE_FOLDER + os.sep + 'Tampere_flights_full'
+  input_dir = BASE_FOLDER + os.sep + 'Tampere_flights'
   output_dir = input_dir + '_gdoper'
 
   # Process all files in 'input_dir' with Gdoper
   batch_process(input_dir, output_dir, single_gdoper)
 
   # Output directory for plots
-  output_plots_dir = input_dir + os.sep + '_plots'
+  output_plots_dir = input_dir + '_plots'
 
   # Plot data for all files in 'output_dir' and output plots to 'output_plots_dir'
   batch_process(output_dir, output_plots_dir, plotting_test)
 
-  # Plot 
+  # Plot data for DOPs vs sats in view and DOPS vs altitude
   sats2gdop_ratio(output_dir, output_plots_dir)
   alt2gdop_ratio(output_dir, output_plots_dir)
+
+  # Get statistics from total set of data in 'input_dir'
   get_batch_stats(input_dir, print_lvl=0, plot=True)
 
-  
   pass

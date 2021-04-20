@@ -13,36 +13,13 @@ GREEN = '\033[32m'
 VIOLET = '\033[35m'
 
 
-PrintLevel = 0
+PrintLevel:int = 0
 
 def Set_PrintLevel(lvl):
   global PrintLevel
   PrintLevel = int(lvl)
 
-def Print(level: str, text: str):
-  if '0' in level or '#' in level:
-    return
-    
-  info_type = ''
-  if 'debug' in level:
-    info_type = f'[DEBUG] {ins.stack()[1].function}()'
-  elif 'info' in level:
-    info_type = '[INFO]'
-  else:
-    info_type = '[OTHER]'
-  
-  s = ''
-  e = ''
-  if level[0] == '\\':
-    s = '\n'
-
-  if level[-1] == '\\':
-    e = '\n'
-
-  print(f'{s}{info_type} {text}{e}')
-
-
-def Debug(level= 0, msg='', nofunc=False):
+def Debug(level:int= 0, msg='', nofunc=False):
   global PrintLevel
   if PrintLevel >= level:
     if nofunc:
@@ -50,11 +27,11 @@ def Debug(level= 0, msg='', nofunc=False):
     else:
       print(f'[DEBUG] {ins.stack()[1].function}() {msg}')
 
-def Stats(level= 0, msg=''):
+def Stats(level:int= 0, msg=''):
   global PrintLevel
   if PrintLevel >= level:
     print(f'[STATS] {msg}')
 
 
 def Info(msg):
-  Print('info', msg)
+  print(f'[INFO] {msg}')

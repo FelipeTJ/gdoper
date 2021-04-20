@@ -19,7 +19,7 @@ import csv
 import xarray as xr
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-from src.d_print import Debug,Info,Print
+from src.d_print import Debug,Info
 import src.common as c
 
 os.chdir('..')  # gdoper.py directory
@@ -102,7 +102,7 @@ class Pos_data():
     if col_name in self.data.keys():
       return self.data[col_name]
     else:
-      Print('error', f'No such column with name {col_name} found.')
+      raise Exception(f'No column with name {col_name} found.')
       self.print_titles()
 
 
