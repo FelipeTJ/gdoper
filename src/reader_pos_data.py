@@ -102,8 +102,8 @@ class Pos_data():
     if col_name in self.data.keys():
       return self.data[col_name]
     else:
-      raise Exception(f'No column with name {col_name} found.')
       self.print_titles()
+      raise Exception(f'No column with name {col_name} found.')
 
 
   def get_merged_cols(self, *cols) -> dict:
@@ -117,7 +117,6 @@ class Pos_data():
     for i in cols:
       if i not in self.data.keys():
         raise Exception(f'Variable \'{i}\' does not exist in this file.{self.filename}')
-        return
     
       new_cols[i] = self.get_col(i)
 

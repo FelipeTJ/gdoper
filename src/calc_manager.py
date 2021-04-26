@@ -28,10 +28,12 @@ import src.reader_rinex as rr
 import src.reader_pos_data as rpc
 from src.fov_models import FOV_model, FOV_view_match
 from src.calcs import Calc, Calc_gdop
-from src.d_print import Stats, Debug, Info, Set_PrintLevel
+from src.d_print import Stats, Debug, Info, Enable_Debug
 
 
-
+# TODO: calc_manager options:
+# A dict of kwargs with all the default settings
+# the dict can be accessed and modified at gdoper.py level
 
 class Calc_manager:
   def __init__(self, in_file,
@@ -248,7 +250,7 @@ class Calc_manager:
     """
       Acquire relevant data, process, and output into csv format
     """
-    Set_PrintLevel(self.__debug)
+    Enable_Debug(self.__debug)
     self.print_dirs()
     self.__reset()
 
