@@ -19,6 +19,8 @@ import xarray as xr
 from xarray.core.dataarray import DataArray
 from xarray.core.dataset import Dataset
 from typing import Mapping, List, Tuple
+from dataclasses import dataclass
+from enum import Enum
 import georinex as gr
 import datetime as dt
 import numpy as np
@@ -28,11 +30,18 @@ import wget as wget
 import copy
 import time
 import os
+
+from d_print import Enable_Debug
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-import src.common as cm
-import src.unavco_stations as s
-from src.d_print import Info, Debug, Stats, Set_PrintLevel, RED, CEND
+if __name__ == '__main__':
+  import common as cm
+  import unavco_stations as s
+  from d_print import Info, Debug, Stats, Set_PrintLevel, RED, CEND
+else:
+  import src.common as cm
+  import src.unavco_stations as s
+  from src.d_print import Info, Debug, Stats, Set_PrintLevel, RED, CEND
 
 # TODO: create directory if it doesn't exist
 # Directory where downloaded rinex files are stored 
@@ -45,8 +54,247 @@ ECC_TOL = 0.001
 DEFAULT_STATIONS = ['ac70','ab33','ac15']
 DL_MAX_TRIES = 5
 
+# TODO: rinex_reader options:
+# A dict of kwargs with all the default settings
+# the dict can be accessed and modified at gdoper.py level
 
-class Satellite:
+
+# EPN database file example:
+# ftp://igs.bkg.bund.de/EUREF/obs/2021/028/ORIV00FIN_R_20210280000_01D_MN.rnx.gz
+# **station_data:
+#   date_measured:  28.1.2021
+#   station_name:   ORIV
+#   country_code:   FIN (Finland)
+#   data_source:    R
+#   resolution:     01D
+#   rinex_const:    MN  (Mixed constellation navigation/ephemeris RINEX 3)
+
+class Repo(Enum):
+  UNAVCO = 1
+  EPN = 2
+
+@dataclass
+class Station:                # Defaults for would-be UNAVCO stations in comments
+  date_measured: str
+  name:          str = 'ORIV'   # ac70
+  country_code:  str = 'FIN'    # ''
+  data_source:   str = 'R'      # ''
+  resolution:    str = '01D'    # ''      # TODO: implement time resolution checking
+  rinex_const:   str = 'GN'     # n
+  station_type: Repo = Repo.EPN # UNAVCO
+
+class RinexFile:
+  """
+    Class for handling RINEX filename manipulation
+  """
+  def __init__(self, station:Station, local_file='') -> None:
+    self.__date = None      # Date of the measurements as datetime object 
+    self.__station = None   # Station dataclass object
+    self.__local_fn = None  # Name of local file containing rinex data
+    self.__remote_fn = None # Name of remote repo file where data is available
+    self.__repo = None      # Publicly available RINEX data (repo name)
+    self.__has_data = False
+
+    self.__setup(station, local_file)
+
+  def __setup(self, station:Station, local_file,):
+    if local_file != '':
+      self.__local_fn = local_file
+      self.__has_data = True
+      return
+
+    self.set_date(station.date_measured)
+    self.__station = station              # TODO: add checking if station is in EPN network
+    self.__repo = station.station_type
+    self.__remote_fn = self.__get_remote_n(station)
+  
+  def __get_remote_n(self, station:Station):
+    year = self.__date.year
+    gps_day = (self.__date - dt.datetime(year, 1, 1)).days
+    two_year = (float(year)/100 - int(float(year)/100))*100
+
+    if self.__repo == Repo.EPN:
+      Ccode = station.country_code
+      R = station.data_source
+      res = station.resolution
+      M = station.rinex_const
+
+      rem_dir = 'ftp://igs.bkg.bund.de/EUREF/obs/'
+      fn = f'{self.__station.name}00{Ccode}_{R}_{year}{gps_day:03}0000_{res}_{M}.rnx.gz'
+      return f'{rem_dir}{year}/{gps_day:03}/{fn}'
+      
+    elif self.__repo == Repo.UNAVCO:
+      rem_dir = 'data-out.unavco.org/pub/rinex/nav/'
+      fn = f'{self.__station.name}{gps_day:03}0.{two_year}n.Z'
+      return f'{rem_dir}{year}/{gps_day:03}/{fn}'
+    
+    else:
+      raise Exception(f'Repository \'{self.__repo}\' not supported')
+
+  def set_date(self, idate):
+    # Update date
+    self.__date = dt.datetime.fromisoformat(idate) # TODO: use proper ISO-8601 parsing
+
+    # Update filename if obj is initialized
+    if self.__repo != None:
+      self.__remote_fn = self.__get_remote_n(self.__station)
+
+  def get_date(self):
+    return self.__date
+
+  def set_station(self, station:Station):
+    self.__station = station
+    self.set_date(station)
+
+  def has_local_file(self):
+    return self.__has_data
+
+  def set_local_file(self, local:str):
+    self.__local_fn = local
+    self.__has_data = True
+
+  def get_local_file(self):
+    if self.__has_data:
+      return self.__local_fn
+    return None
+
+  def get_remote_url(self):
+    return self.__remote_fn
+
+  def get_filename(self):
+    return self.__remote_fn.split('/')[-1]
+
+  def get_filename_date(self):
+    if self.__repo == 'EPN':
+      return self.get_filename()[12:23]
+
+    elif self.__repo == 'UNAVCO':
+      return self.get_filename()[4:10]
+
+class Reader_rinex:
+  def __init__(self):
+    # Dict containing all satellite objects
+    self.__sats: t.Dict[str, _Satellite] = {}
+
+    self.__rinex_dir = None
+    self.__rinex_file = None
+    self.__is_setup = False
+
+  def setup(self, date, rinex_dir=cm.RINEX_FOLDER):
+    # Do setup of RinexFile obj and download data if needed
+
+    # TODO: add creation of Station object to reader_rinex creation options
+    stat = Station(date)
+    self.__rinex_file = RinexFile(stat)
+    self.__rinex_dir = rinex_dir
+
+    if not self.__local_rinex_exists():
+      self.__download_rinex()
+
+    self.__read_rinex()
+    if len(self.__sats) == 0:
+      raise Exception('No Satellites positions were read.')
+
+    self.__is_setup = True
+    
+  def modify_station(self):
+    # TODO: Change station parameters
+    pass
+
+  def __local_rinex_exists(self) -> bool:
+    file = self.__rinex_file.get_filename()
+    if file in os.listdir(self.__rinex_dir):
+      Debug(1, f'File exists locally: {file}')
+      Debug(2, f'dir: {self.__rinex_dir}')
+      full_local_dir = self.__rinex_dir + os.sep + file
+      self.__rinex_file.set_local_file(full_local_dir)
+      return True
+    return False
+
+  def __download_rinex(self):
+    Enable_Debug()
+    
+    url = self.__rinex_file.get_remote_url()
+    out = self.__rinex_dir + os.sep + url.split('/')[-1]
+
+    fn = url.split('/')[-1]
+
+    Info(f'Downloading \'{fn}\'...')
+    Debug(0, f'From: {url}', nofunc=True)
+    try:
+      file = wget.download(url, out)
+      if file == out:
+        print()
+        Info(f'File downloaded successfully: {fn}')
+
+      else:
+        raise Exception('File output was not as expected: {file}')
+    except:
+      # TODO: Query ftp to see which file formats are available for station
+      raise Exception('Something failed')
+
+    self.__rinex_file.set_local_file(out)
+
+  def __read_rinex(self):
+    Enable_Debug(2)
+
+    Stats(1,f'Reading Rinex file "{self.__rinex_file.get_filename()}"...')
+    now = time.perf_counter()
+    
+    # TODO: read only necessary constellations             v <- reads only GPS
+    nav = gr.load(self.__rinex_file.get_local_file(), use='G')
+
+    date = self.__rinex_file.get_date().date()
+
+    for n in nav['sv']:
+      sat = np.array2string(n).strip('\'')
+      Debug(2,f'Satellite: {sat}\t date: {date}')
+
+      # Create or add data to Satellite object at date of measurement
+      if sat not in self.__sats.keys():
+        self.__sats[sat] = _Satellite(sat, date, nav.sel(sv=sat).dropna(dim="time", how="all"))
+      elif not self.__sats[sat].has_date(date):
+        self.__sats[sat].add_date(date, nav.sel(sv=sat).dropna(dim="time", how="all"))
+
+    Stats(1,f'Done. ({time.perf_counter()-now:.3f}s for {len(self.__sats)} satellites)')
+    Stats(1,'')
+
+
+  def get_sats_pos(self, time_list: List[dt.datetime]):
+    Enable_Debug(2)
+
+    if not self.__is_setup:
+      raise Exception('Reader_rinex object has not been setup.')
+
+    times = time_list.copy()
+
+    # Convert to datetime objects if time_list is list of str
+    if len(times) != 0:
+      for i in range(len(times)):
+        if type(times[i]) == str:
+          times[i] = dt.datetime.fromisoformat(times[i])
+
+    now = time.perf_counter()
+    Stats(1,f'Calculating satellite positions "{self.__rinex_file.get_filename()}"...')
+
+    results = {}
+    for t in time_list:
+        results[t] = {}
+    
+    for prn in list(self.__sats.keys()):
+      data_array = self.__sats[prn].get_position(times)
+
+      for t in times:
+        results[t.isoformat(sep=' ')][prn] =  data_array.sel(time=t).values
+
+    Stats(1,f'Done. ({time.perf_counter()-now:.3f}s for {len(self.__sats)*len(times)} positions)')
+    Stats(1,'')
+
+    # Output order is:  times{} -> prn{} = (x,y,z)
+    return results
+
+
+class _Satellite:
   def __init__(self, prn: str, date: dt.date, gps_data: Dataset):
     self.prn = prn
     self.dates = [date]
@@ -92,7 +340,6 @@ class Satellite:
     da = xr.DataArray(list(ecef), dims=['space', 'time'], coords=[['x','y','z'], times])
     return da
 
-
   def add_date(self, datetime: dt.datetime, gps_data: Dataset):
     if not self.has_date(datetime):
       self.gps_data[datetime.date] = gps_data
@@ -124,9 +371,8 @@ class Orbital_data:
       self.user_provided_rinex = True
       self.rinex_file = local_data[-14:]
 
-
     # Dict containing all satellite objects
-    self.sats: t.Dict[str, Satellite] = {}
+    self.sats: t.Dict[str, _Satellite] = {}
 
     self.done_setup = False
  
@@ -285,7 +531,7 @@ class Orbital_data:
 
       # Create or add data to Satellite object at date of self.utc
       if sat not in self.sats.keys():
-        self.sats[sat] = Satellite(sat, self.utc, nav.sel(sv=sat).dropna(dim="time", how="all"))
+        self.sats[sat] = _Satellite(sat, self.utc, nav.sel(sv=sat).dropna(dim="time", how="all"))
       elif not self.sats[sat].has_date(self.utc):
         self.sats[sat].add_date(self.utc, nav.sel(sv=sat).dropna(dim="time", how="all"))
       else:
@@ -338,12 +584,15 @@ class Orbital_data:
 
 if __name__ == '__main__':
 
-  o = Orbital_data('2019-07-10 07:25:31')
-  o.setup()
-  o.print_data()
+  #o = Orbital_data('2019-07-10 07:25:31')
+  #o.setup()
+  #o.print_data()
   #print("Results:\n",o.get_sats_pos(['2019-07-10 08:25:31', '2019-07-10 14:25:31']))
-  o.get_sats_pos(['2019-07-10 08:25:31', '2019-07-10 14:25:31'])
+  #o.get_sats_pos(['2019-07-10 08:25:31', '2019-07-10 14:25:31'])
 
+  r = Reader_rinex()
+  r.setup('2019-07-10 07:25:31')
+  r.get_sats_pos(['2019-07-10 08:25:31', '2019-07-10 14:25:31'])
 
 # %%
 'ftp://data-out.unavco.org/pub/rinex/nav/2021/057/ac070570.21n.Z'
