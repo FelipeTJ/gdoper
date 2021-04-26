@@ -30,7 +30,7 @@ import time
 import os
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-import src.common as c
+import src.common as cm
 import src.unavco_stations as s
 from src.d_print import Info, Debug, Stats, Set_PrintLevel, RED, CEND
 
@@ -89,9 +89,7 @@ class Satellite:
     Debug(3, f'After: {close_nav}')
 
     ecef = gr.keplerian.keplerian2ecef(close_nav)
-
     da = xr.DataArray(list(ecef), dims=['space', 'time'], coords=[['x','y','z'], times])
-
     return da
 
 
@@ -154,8 +152,8 @@ class Orbital_data:
       if self.utc.year == 1900:
         raise Exception('Setup needs an initial date to look for satellite data.')
 
-    if not os.path.exists(c.RINEX_FOLDER):
-      os.mkdir(c.RINEX_FOLDER)
+    if not os.path.exists(cm.RINEX_FOLDER):
+      os.mkdir(cm.RINEX_FOLDER)
 
     self.done_setup = True
 
@@ -177,7 +175,7 @@ class Orbital_data:
  
   def change_rin_file(self, fn: str):
     self.rinex_file = fn
-    self.filedir_local = c.RINEX_FOLDER + os.sep + fn
+    self.filedir_local = cm.RINEX_FOLDER + os.sep + fn
     self.station = self.rinex_file[:4]
 
     self.gps_day = int(self.rinex_file[4:7])
@@ -191,7 +189,7 @@ class Orbital_data:
       self.station = new_station
       self.rinex_file = f'{self.station}{self.gps_day:03}0.{self.gps_year}n.Z'
       self.filedir_remote = self.get_remote_dir()
-      self.filedir_local = f'{c.RINEX_FOLDER}/{self.rinex_file}'
+      self.filedir_local = f'{cm.RINEX_FOLDER}/{self.rinex_file}'
       self.is_file_available = False
 
   def change_date(self, new_datetime: dt.datetime):    
@@ -213,7 +211,7 @@ class Orbital_data:
     self.setup_check()
     
     Debug(3, f'local_file_exists()')
-    for file in os.listdir(c.RINEX_FOLDER):
+    for file in os.listdir(cm.RINEX_FOLDER):
       # Check if file with same day exists
       #Debug(f'comparing self.rinex_file: {self.rinex_file[4:11]} vs {file[4:11]}')
       if self.rinex_file[4:11] in file[4:11]:
@@ -248,7 +246,7 @@ class Orbital_data:
           raise Exception(f'Maximum download request attempts ({DL_MAX_TRIES}) reached.')
 
         url = f'ftp://{s.get_url()}{self.filedir_remote}'
-        out = f'{c.RINEX_FOLDER}/{self.rinex_file}'
+        out = f'{cm.RINEX_FOLDER}/{self.rinex_file}'
 
         Debug(0, f'Remote URL: {url}')
         Debug(0, f'Local dir: {out}')
@@ -266,7 +264,7 @@ class Orbital_data:
           Info(f'Error message: {e}')
     
     self.is_file_available = True
-    return f'{c.RINEX_FOLDER}/{self.rinex_file}'
+    return f'{cm.RINEX_FOLDER}/{self.rinex_file}'
 
   def read_rinex(self):
     self.setup_check()

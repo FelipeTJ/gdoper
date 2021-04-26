@@ -2,6 +2,7 @@ from pyproj.transformer import Transformer
 import datetime as d
 import typing as t
 import numpy as np
+import math
 import os
 
 BASE_FOLDER = os.path.dirname(os.path.abspath(__file__) )[:-4]
@@ -49,6 +50,17 @@ def lla2ecef(lat, lon, alt) -> tuple:
   t = Transformer.from_crs("epsg:4979", "epsg:4978")
   return (t.transform(lat, lon, alt))
 
+def ecef2lla(x,y,z):
+  # https://epsg.io/4978 and http://epsg.io/4979
+  # WGS84 lat,lon,alt    and WGS84 ECEF
+  t = Transformer.from_crs("epsg:4978","epsg:4979")
+  return (t.transform(x, y, z))
+
+def rad2deg(n):
+  return n*180/math.pi
+
+def deg2rad(n):
+  return n*math.pi/180
 
 def normalize(vector: np.array) -> np.array:
   return vector/np.linalg.norm(vector)

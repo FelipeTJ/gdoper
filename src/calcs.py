@@ -3,7 +3,7 @@
 from typing import Tuple, List
 import numpy as np
 from numpy.core.fromnumeric import trace
-import src.common as c
+import src.common as cm
 
 class Calc:
   def __init__(self):
@@ -31,21 +31,22 @@ class Calc_gdop(Calc):
     return ['HDOP', 'VDOP', 'GDOP']
 
   def required_vars(self) -> List[str]:
-    return [c.CHN_UTC, c.CHN_LAT, c.CHN_LON, c.CHN_ALT]
+    return [cm.CHN_UTC, cm.CHN_LAT, cm.CHN_LON, cm.CHN_ALT]
 
   def do_calc(self, pos_pos, sats_FOV) -> Tuple[str, list]:
     # sats_FOV is ordered like:  times{} -> prn{} = (x,y,z)
+    fov_name = 'sats_FOV' # TODO: proper implemenmtation comes with linkning of Calc to FOVmodel 
 
-    results = {'HDOP': [], 'VDOP': [], 'GDOP': [], 'satellites':[]}  # TODO: Add unique calculation signature to names
+    results = {'HDOP': [], 'VDOP': [], 'GDOP': [], fov_name:[]}  # TODO: Add unique calculation signature to names
 
-    for i in range(len(pos_pos[c.CHN_UTC])):
-      t = pos_pos[c.CHN_UTC][i]
+    for i in range(len(pos_pos[cm.CHN_UTC])):
+      t = pos_pos[cm.CHN_UTC][i]
 
-      lat = pos_pos[c.CHN_LAT][i]
-      lon = pos_pos[c.CHN_LON][i]
-      alt = pos_pos[c.CHN_ALT][i]
+      lat = pos_pos[cm.CHN_LAT][i]
+      lon = pos_pos[cm.CHN_LON][i]
+      alt = pos_pos[cm.CHN_ALT][i]
 
-      u = np.array(c.lla2ecef(lat, lon, alt))
+      u = np.array(cm.lla2ecef(lat, lon, alt))
 
       mat: np.array = []
 
@@ -62,7 +63,7 @@ class Calc_gdop(Calc):
       T = [Q[0][0], Q[1][1], Q[2][2], Q[3][3]]
       hdop = np.sqrt(T[0]**2 + T[1]**2)
       
-      results['satellites'].append(len(mat))
+      results[fov_name].append(len(mat))
       results['HDOP'].append(hdop)
       results['VDOP'].append(T[2])
       results['GDOP'].append(np.sqrt(np.trace(Q)))

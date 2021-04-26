@@ -20,7 +20,7 @@ import xarray as xr
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 from src.d_print import Debug,Info
-import src.common as c
+import src.common as cm
 
 os.chdir('..')  # gdoper.py directory
 
@@ -70,7 +70,7 @@ class Pos_data():
     return ordered
  
 
-  def read_csv(self) -> c.t.Tuple[c.t.List[str], list]:
+  def read_csv(self) -> cm.t.Tuple[cm.t.List[str], list]:
     self.setup_check()
 
     titles = []
@@ -116,7 +116,7 @@ class Pos_data():
     new_cols = {}
     for i in cols:
       if i not in self.data.keys():
-        raise Exception(f'Variable \'{i}\' does not exist in this file.')
+        raise Exception(f'Variable \'{i}\' does not exist in this file.{self.filename}')
         return
     
       new_cols[i] = self.get_col(i)
@@ -132,7 +132,7 @@ class Pos_data():
     self.setup_check()
 
     # TODO: make the column names more flexible
-    return self.get_col(c.CHN_UTC)[0]
+    return self.get_col(cm.CHN_UTC)[0]
 
 
   def print_titles(self):
@@ -148,14 +148,14 @@ def test_run():
   print('Current dir:',os.getcwd())
   print()
 
-  test_file = c.POS_DATA_FOLDER + os.sep + 'test_data.csv'
+  test_file = cm.POS_DATA_FOLDER + os.sep + 'test_data.csv'
 
   d = Pos_data(test_file)
   d.setup()
   d.print_titles()
   d.get_merged_cols('latitude', 'longitude', 'altitude_above_seaLevel(meters)', 'datetime(utc)', 'satellites')
-  d.get_merged_cols(c.CHN_LON, c.CHN_LAT, c.CHN_ALT, c.CHN_UTC, c.CHN_SAT)
-  d.get_merged_cols(c.CHN_DEFAULTS)
+  d.get_merged_cols(cm.CHN_LON, cm.CHN_LAT, cm.CHN_ALT, cm.CHN_UTC, cm.CHN_SAT)
+  d.get_merged_cols(cm.CHN_DEFAULTS)
   #print(f'longitudes: {d.get_col("longitude")}')
 
 

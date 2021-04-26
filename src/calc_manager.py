@@ -23,12 +23,12 @@ import time
 import os
 
 
-import src.common as c
+import src.common as cm
 import src.reader_rinex as rr
 import src.reader_pos_data as rpc
 from src.fov_models import FOV_model, FOV_view_match
 from src.calcs import Calc, Calc_gdop
-from src.d_print import Debug, Info, Set_PrintLevel
+from src.d_print import Stats, Debug, Info, Set_PrintLevel
 
 
 
@@ -37,9 +37,9 @@ class Calc_manager:
   def __init__(self, in_file,
               out_file = '',
               rinex_file = '',
-              rinex_folder = c.RINEX_FOLDER,
-              data_folder = c.POS_DATA_FOLDER,
-              out_folder = c.POS_DATA_FOLDER,
+              rinex_folder = cm.RINEX_FOLDER,
+              data_folder = cm.POS_DATA_FOLDER,
+              out_folder = cm.POS_DATA_FOLDER,
               ts = 5,
               debug = -1):
 
@@ -143,15 +143,15 @@ class Calc_manager:
     last_saved =  dt.datetime.fromisoformat(self.pos_obj.get_first_utc()) - dif
 
     for i in range(all_pos_row_count):
-      t = dt.datetime.fromisoformat(all_pos[c.CHN_UTC][i])  # TODO: use proper name for utc
+      t = dt.datetime.fromisoformat(all_pos[cm.CHN_UTC][i])  # TODO: use proper name for utc
 
       if t-last_saved >= dif:
 
         # Add samples from this index
         for chn in chn_keys:
           # Do not sample invalid values
-          if chn == c.CHN_LAT and all_pos[chn][i] == '0': continue
-          if chn == c.CHN_LON and all_pos[chn][i] == '0': continue
+          if chn == cm.CHN_LAT and all_pos[chn][i] == '0': continue
+          if chn == cm.CHN_LON and all_pos[chn][i] == '0': continue
 
           sampled[chn].append(all_pos[chn][i])
         
@@ -248,9 +248,8 @@ class Calc_manager:
     """
       Acquire relevant data, process, and output into csv format
     """
-    self.print_dirs()
     Set_PrintLevel(self.__debug)
-
+    self.print_dirs()
     self.__reset()
 
     tot = time.perf_counter()
@@ -271,7 +270,7 @@ class Calc_manager:
 
     now = time.perf_counter()
     Debug(1, f'Aquiring satellite info...')
-    all_sats = self.__acquire_sats(pos[c.CHN_UTC]) # TODO: make CHNs more flexible
+    all_sats = self.__acquire_sats(pos[cm.CHN_UTC]) # TODO: make CHNs more flexible
     Debug(1, f'Done. {time.perf_counter()-now:.3f}s\n')
 
     now = time.perf_counter()
@@ -289,7 +288,7 @@ class Calc_manager:
     self.__output_to_file()
     Debug(1, f'Done. {time.perf_counter()-now:.3f}s\n')
 
-    Info(f'Total runtime: {time.perf_counter() - tot:.3f}'
+    Stats(0,f'Total runtime: {time.perf_counter() - tot:.3f}'
           + f' for {len(self.output_map[self.ordered_keys[0]])} output rows\n')
 
 
