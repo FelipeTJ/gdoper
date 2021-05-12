@@ -31,17 +31,16 @@ import copy
 import time
 import os
 
-from d_print import Enable_Debug
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 if __name__ == '__main__':
   import common as cm
   import unavco_stations as s
-  from d_print import Info, Debug, Stats, Set_PrintLevel, RED, CEND
+  from d_print import Enable_Debug, Info, Debug, Stats, Set_PrintLevel, RED, CEND
 else:
   import src.common as cm
   import src.unavco_stations as s
-  from src.d_print import Info, Debug, Stats, Set_PrintLevel, RED, CEND
+  from src.d_print import Enable_Debug,Info, Debug, Stats, Set_PrintLevel, RED, CEND
 
 # TODO: create directory if it doesn't exist
 # Directory where downloaded rinex files are stored 
@@ -59,6 +58,8 @@ DL_MAX_TRIES = 5
 # the dict can be accessed and modified at gdoper.py level
 
 
+
+
 # EPN database file example:
 # ftp://igs.bkg.bund.de/EUREF/obs/2021/028/ORIV00FIN_R_20210280000_01D_MN.rnx.gz
 # **station_data:
@@ -73,21 +74,41 @@ class Repo(Enum):
   UNAVCO = 1
   EPN = 2
 
-@dataclass
-class Station:                # Defaults for would-be UNAVCO stations in comments
-  date_measured: str
-  name:          str = 'ORIV'   # ac70
-  country_code:  str = 'FIN'    # ''
-  data_source:   str = 'R'      # ''
-  resolution:    str = '01D'    # ''      # TODO: implement time resolution checking
-  rinex_const:   str = 'GN'     # n
-  station_type: Repo = Repo.EPN # UNAVCO
+# Unavco uses Rinex v2.11, only 2 constellations available
+# (https://www.unavco.org/data/gps-gnss/ftp/ftp.html)
+class UncC(Enum):
+  GPS = 'n' # GPS
+  GAL = 'g' # Galileo
+  MET = 'm' # METEO data
 
-class RinexFile:
+# Constellation names in EPN format from BKGE 
+# (https://www.epncb.oma.be/ftp/center/data/BKGE.RDC)
+class EpnC(Enum):
+  GPS = 'GN'    # GPS
+  GLO = 'RN'    # GLONASS
+  GAL = 'EN'    # Galileo
+  QZS = 'JN'    # QZSS
+  BDS = 'CN'    # BeiDou
+  SBS = 'SN'    # SBAS
+  MIXED = 'MN'  # Mixed constellation file
+  METEO = 'MM'  # METEO data
+  VERIFIED = 'MO' # Verified GNSS obs data in compressed format
+
+@dataclass
+class StationOptions:                  # Defaults for would-be UNAVCO stations in comments
+  date_measured: str = None
+  name:          str = 'ORIV'     # ac70
+  country_code:  str = 'FIN'      # ''
+  data_source:   str = 'R'        # ''
+  resolution:    str = '01D'      # ''      # TODO: implement time resolution checking
+  rinex_const        = EpnC.GPS # EncC.GPS
+  station_type: Repo = Repo.EPN   # UNAVCO
+
+class _RinexFile:
   """
     Class for handling RINEX filename manipulation
   """
-  def __init__(self, station:Station, local_file='') -> None:
+  def __init__(self, station:StationOptions, local_file='') -> None:
     self.__date = None      # Date of the measurements as datetime object 
     self.__station = None   # Station dataclass object
     self.__local_fn = None  # Name of local file containing rinex data
@@ -97,18 +118,19 @@ class RinexFile:
 
     self.__setup(station, local_file)
 
-  def __setup(self, station:Station, local_file,):
+  def __setup(self, station:StationOptions, local_file,):
     if local_file != '':
       self.__local_fn = local_file
       self.__has_data = True
       return
 
     self.set_date(station.date_measured)
-    self.__station = station              # TODO: add checking if station is in EPN network
+    self.__station = station            # TODO: add checking if station is in EPN network
     self.__repo = station.station_type
-    self.__remote_fn = self.__get_remote_n(station)
+    self.__remote_fn = self.__get_remote_n()
   
-  def __get_remote_n(self, station:Station):
+  def __get_remote_n(self):
+    station = self.__station
     year = self.__date.year
     gps_day = (self.__date - dt.datetime(year, 1, 1)).days
     two_year = (float(year)/100 - int(float(year)/100))*100
@@ -117,7 +139,7 @@ class RinexFile:
       Ccode = station.country_code
       R = station.data_source
       res = station.resolution
-      M = station.rinex_const
+      M = station.rinex_const.value
 
       rem_dir = 'ftp://igs.bkg.bund.de/EUREF/obs/'
       fn = f'{self.__station.name}00{Ccode}_{R}_{year}{gps_day:03}0000_{res}_{M}.rnx.gz'
@@ -131,20 +153,33 @@ class RinexFile:
     else:
       raise Exception(f'Repository \'{self.__repo}\' not supported')
 
+  @staticmethod
+  def iso_to_dateobj(date_str):
+    date = dt.datetime.fromisoformat(date_str)
+    return date
+
   def set_date(self, idate):
     # Update date
-    self.__date = dt.datetime.fromisoformat(idate) # TODO: use proper ISO-8601 parsing
+    self.__date = self.iso_to_dateobj(idate) # TODO: use proper ISO-8601 parsing
 
     # Update filename if obj is initialized
     if self.__repo != None:
-      self.__remote_fn = self.__get_remote_n(self.__station)
+      self.__remote_fn = self.__get_remote_n()
+    self.__has_data = False
 
   def get_date(self):
     return self.__date
 
-  def set_station(self, station:Station):
+  def set_station(self, station:StationOptions):
+    if station.date_measured != None:
+      new_date = self.iso_to_dateobj(station.date_measured)
+      if new_date != self.__date:
+        raise Exception('\'date_measured\' property in StationOptions should not be modified.')
     self.__station = station
-    self.set_date(station)
+    self.__has_data = False
+  
+  def get_station(self):
+    return self.__station
 
   def has_local_file(self):
     return self.__has_data
@@ -171,22 +206,28 @@ class RinexFile:
     elif self.__repo == 'UNAVCO':
       return self.get_filename()[4:10]
 
-class Reader_rinex:
-  def __init__(self):
+
+@dataclass
+class RinexOptions:
+  folder_rinex: str = cm.RINEX_FOLDER
+  station_params: StationOptions = StationOptions()
+
+class ReaderRinex:
+  def __init__(self, r_opts: RinexOptions = RinexOptions()):
     # Dict containing all satellite objects
     self.__sats: t.Dict[str, _Satellite] = {}
 
-    self.__rinex_dir = None
-    self.__rinex_file = None
+    self.__opts = r_opts
+    self.__rinex_obj = None
     self.__is_setup = False
 
-  def setup(self, date, rinex_dir=cm.RINEX_FOLDER):
-    # Do setup of RinexFile obj and download data if needed
+  def setup(self, date, r_opts:RinexOptions = RinexOptions()):
+    # Update RinexOptions only if r_opts is not default
+    if self.__opts != r_opts and r_opts != RinexOptions():
+      self.__opts = r_opts
+    self.__opts.station_params.date_measured = date
 
-    # TODO: add creation of Station object to reader_rinex creation options
-    stat = Station(date)
-    self.__rinex_file = RinexFile(stat)
-    self.__rinex_dir = rinex_dir
+    self.__rinex_obj = _RinexFile(self.__opts.station_params)
 
     if not self.__local_rinex_exists():
       self.__download_rinex()
@@ -202,22 +243,26 @@ class Reader_rinex:
     pass
 
   def __local_rinex_exists(self) -> bool:
-    file = self.__rinex_file.get_filename()
-    if file in os.listdir(self.__rinex_dir):
+    file = self.__rinex_obj.get_filename()
+    if file in os.listdir(self.__opts.folder_rinex):
       Debug(1, f'File exists locally: {file}')
-      Debug(2, f'dir: {self.__rinex_dir}')
-      full_local_dir = self.__rinex_dir + os.sep + file
-      self.__rinex_file.set_local_file(full_local_dir)
+      Debug(2, f'dir: {self.__opts.folder_rinex}')
+      full_local_dir = self.__opts.folder_rinex + os.sep + file
+      self.__rinex_obj.set_local_file(full_local_dir)
       return True
     return False
 
   def __download_rinex(self):
     Enable_Debug()
     
-    url = self.__rinex_file.get_remote_url()
-    out = self.__rinex_dir + os.sep + url.split('/')[-1]
+    url = self.__rinex_obj.get_remote_url()
+    out = self.__opts.folder_rinex + os.sep + url.split('/')[-1]
 
     fn = url.split('/')[-1]
+
+    done = False
+
+    # TODO: use FTP util
 
     Info(f'Downloading \'{fn}\'...')
     Debug(0, f'From: {url}', nofunc=True)
@@ -226,28 +271,52 @@ class Reader_rinex:
       if file == out:
         print()
         Info(f'File downloaded successfully: {fn}')
+        done = True
 
       else:
         raise Exception('File output was not as expected: {file}')
     except:
-      # TODO: Query ftp to see which file formats are available for station
-      raise Exception('Something failed')
+      pass
 
-    self.__rinex_file.set_local_file(out)
+    if not done:
+      old_stat = self.__rinex_obj.get_station()
+      new_stat = old_stat
+      
+      if new_stat.station_type == Repo.EPN:
+        new_stat.rinex_const = EpnC.MIXED
+      
+      self.__rinex_obj.set_station(new_stat)
+
+      url = self.__rinex_obj.get_remote_url()
+      out = self.__opts.folder_rinex + os.sep + url.split('/')[-1]
+
+      try:
+        file = wget.download(url, out)
+        if file == out:
+          print()
+          Info(f'Requested constellation ({old_stat.rinex_const.name})\
+             not found, downloaded mixed file: {fn}')
+          done = True
+      except:
+        # TODO: Query ftp to see which file formats are available for station
+        raise Exception('Something failed')
+
+    self.__rinex_obj.set_local_file(out)
 
   def __read_rinex(self):
     Enable_Debug(2)
 
-    Stats(1,f'Reading Rinex file "{self.__rinex_file.get_filename()}"...')
+    Stats(1,f'Reading Rinex file "{self.__rinex_obj.get_filename()}"...')
     now = time.perf_counter()
     
-    # TODO: read only necessary constellations             v <- reads only GPS
-    nav = gr.load(self.__rinex_file.get_local_file(), use='G')
+    # TODO: read only necessary constellations            v <- reads only GPS
+    nav = gr.load(self.__rinex_obj.get_local_file(), use='G')
 
-    date = self.__rinex_file.get_date().date()
+    date = self.__rinex_obj.get_date().date()
 
     for n in nav['sv']:
       sat = np.array2string(n).strip('\'')
+      if '_' in sat: continue     # Avoids duplicate entries
       Debug(2,f'Satellite: {sat}\t date: {date}')
 
       # Create or add data to Satellite object at date of measurement
@@ -275,7 +344,7 @@ class Reader_rinex:
           times[i] = dt.datetime.fromisoformat(times[i])
 
     now = time.perf_counter()
-    Stats(1,f'Calculating satellite positions "{self.__rinex_file.get_filename()}"...')
+    Stats(1,f'Calculating satellite positions "{self.__rinex_obj.get_filename()}"...')
 
     results = {}
     for t in time_list:
@@ -590,7 +659,7 @@ if __name__ == '__main__':
   #print("Results:\n",o.get_sats_pos(['2019-07-10 08:25:31', '2019-07-10 14:25:31']))
   #o.get_sats_pos(['2019-07-10 08:25:31', '2019-07-10 14:25:31'])
 
-  r = Reader_rinex()
+  r = ReaderRinex()
   r.setup('2019-07-10 07:25:31')
   r.get_sats_pos(['2019-07-10 08:25:31', '2019-07-10 14:25:31'])
 

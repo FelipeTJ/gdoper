@@ -15,6 +15,7 @@
 
 
 # %%
+from dataclasses import dataclass
 from typing import Dict, Mapping, List
 from xarray import DataArray
 from csv import writer
@@ -25,7 +26,8 @@ import os
 
 import src.common as cm
 import src.reader_rinex as rr
-import src.reader_pos_data as rpc
+from src.reader_rinex import ReaderRinex, RinexOptions
+from src.reader_pos_data import ReaderPos
 from src.fov_models import FOV_model, FOV_view_match
 from src.calcs import Calc, Calc_gdop
 from src.d_print import Stats, Debug, Info, Enable_Debug
@@ -34,32 +36,36 @@ from src.d_print import Stats, Debug, Info, Enable_Debug
 # TODO: calc_manager options:
 # A dict of kwargs with all the default settings
 # the dict can be accessed and modified at gdoper.py level
+@dataclass
+class ManagerOptions:
+  file_iname:     str = None  # Input file name must be left empty by user
+  file_oname:     str = ''    # Output filename can be set freely
+  folder_input:   str = cm.POS_DATA_FOLDER
+  folder_output:  str = folder_input
+  sample_period:  int = 5
 
-class Calc_manager:
-  def __init__(self, in_file,
-              out_file = '',
-              rinex_file = '',
-              rinex_folder = cm.RINEX_FOLDER,
-              data_folder = cm.POS_DATA_FOLDER,
-              out_folder = cm.POS_DATA_FOLDER,
-              ts = 5,
-              debug = -1):
 
-    # Sampling period
-    self.Ts = dt.timedelta(seconds=ts)
+class CalcManager:
+  def __init__(self,
+               in_file:str,
+               debug = -1, 
+               m_opts:ManagerOptions = ManagerOptions(), 
+               r_opts:RinexOptions = RinexOptions()
+               ):
 
-    # Directories
-    self.rinex_dir: str = rinex_folder
-    self.pdata_dir: str = data_folder
-    self.out_dir: str = out_folder
+    if m_opts.file_iname != None:
+      raise Exception('\'file_input\' property in ManagerOptions should not be modified.')
+    if r_opts.station_params.date_measured != None:
+      raise Exception('\'date_measured\' property in StationOptions should not be modified.')
 
-    # File names
-    self.input_file: str = in_file
-    self.output_file: str = (in_file[:-4] + '_gdoper.csv' if out_file == '' else out_file)
+    self.opts = m_opts
+    self.opts.file_iname = in_file
+    if m_opts.file_oname == '':
+      self.opts.file_oname = in_file.split('.csv')[0] + '_gdoper.csv'
 
     # Objects
-    self.pos_obj = rpc.Pos_data(self.pdata_dir + os.sep +  self.input_file)
-    self.sat_obj = rr.Orbital_data(local_data=rinex_file)
+    self.pos_obj = ReaderPos(self.opts.folder_input + os.sep +  self.opts.file_iname)
+    self.rin_obj = ReaderRinex(r_opts=r_opts)
     self.fov_obj = FOV_model()      # real obj created in setup_FOV()
     self.calcs_q: List[Calc] = []   # A queue for calculations
     self.req_vars = set()           # The variables required by FOV_model and Calc
@@ -96,8 +102,20 @@ class Calc_manager:
     self.ordered_keys.clear()
     self.req_vars.clear()
 
+  def __is_setup(self) -> bool:
+    if not self.fov_obj.is_setup:
+      return False
+    
+    if not self.pos_obj.is_setup:
+      return False
 
-  def __setup(self) -> None:
+    for i in self.calcs_q:
+      if not i.is_setup:
+        return False
+  
+    return True
+
+  def __setup(self, force=False) -> None:
     """
       Perform checks and do setups before starting to process data
     """
@@ -121,9 +139,13 @@ class Calc_manager:
 
     self.req_vars = self.req_vars.union(set(self.fov_obj.required_vars()))
 
-    # Have readers check for existance of their files and folders
-    self.pos_obj.setup()
-    self.sat_obj.setup(self.pos_obj.get_first_utc())
+    if force:
+      self.pos_obj.setup()
+      self.rin_obj.setup(self.pos_obj.get_first_utc())
+    else:
+      if not self.pos_obj.is_setup:
+        self.pos_obj.setup()
+        self.rin_obj.setup(self.pos_obj.get_first_utc())
 
 
   def __sample_pos(self) -> Dict[str, list]:
@@ -141,7 +163,7 @@ class Calc_manager:
       sampled[i] = []
 
     # Sample
-    dif = dt.timedelta(seconds=self.Ts.seconds)
+    dif = dt.timedelta(seconds=self.opts.sample_period)
     last_saved =  dt.datetime.fromisoformat(self.pos_obj.get_first_utc()) - dif
 
     for i in range(all_pos_row_count):
@@ -166,7 +188,7 @@ class Calc_manager:
     """
       Return all satellites for all pos in time
     """
-    return self.sat_obj.get_sats_pos(pos_timestamps)
+    return self.rin_obj.get_sats_pos(pos_timestamps)
     
 
   def __sats_in_fov(self, pos_pos, sats_pos):
@@ -212,7 +234,7 @@ class Calc_manager:
       File name is "self.out_dir + self.output_file"
     """
 
-    fn = self.out_dir + os.sep + self.output_file
+    fn = self.opts.folder_output + os.sep + self.opts.file_oname
     map_keys = self.ordered_keys
     row_count = len(self.output_map[map_keys[0]])
 
@@ -229,22 +251,14 @@ class Calc_manager:
 
   def print_dirs(self):
     Info(f'Calc_manager setup:')
-    Info(f'- sample time:\t{self.Ts}s')
-    gd_p = self.pdata_dir.find("Gdoper")
-    if gd_p != -1:
-      Info(f'- input file:\t{self.pdata_dir[gd_p-1:] + os.sep + self.input_file}')
-    else:
-
-      Info(f'- input file:\t{self.pdata_dir + os.sep + self.input_file}')
-
-    gd_po = self.out_dir.find("Gdoper")
-    if gd_po != -1:
-      Info(f'- output file:\t{self.out_dir[gd_po-1:] + os.sep + self.output_file}\n')
-    else:
-      Info(f'- output file:\t{self.out_dir + os.sep + self.output_file}\n')
-
-
-
+    #Info(f'- constellation:\t{self.rin_obj.__opts.station_params.station_type}s')  # TODO: make this possible
+    Info(f'- sample period:\t{self.opts.sample_period}s')
+    Info(f'- FOV model    :\t{self.fov_obj.__str__()}')
+    Info(f'- Calcs        :\t{[i.__str__() for i in self.calcs_q]}')
+    Info(f'- input file   :\t{self.opts.file_iname}')
+    Debug(0,f'- input dir    :\t{self.opts.folder_input}')
+    Info(f'- output file  :\t{self.opts.file_oname}\n')
+    Debug(0,f'- output dir   :\t{self.opts.folder_output}')
 
   def process_data(self):
     """
@@ -256,9 +270,11 @@ class Calc_manager:
 
     tot = time.perf_counter()
     now = time.perf_counter()
-    Debug(1, f'Setting up...')
-    self.__setup()
-    Debug(1, f'Done. {time.perf_counter()-now:.3f}s\n')
+
+    if not self.__is_setup():
+      Debug(1, f'Setting up...')
+      self.__setup()
+      Debug(1, f'Done. {time.perf_counter()-now:.3f}s\n')
 
     now = time.perf_counter()
     Debug(1, f'Sampling positions...')
@@ -276,7 +292,7 @@ class Calc_manager:
     Debug(1, f'Done. {time.perf_counter()-now:.3f}s\n')
 
     now = time.perf_counter()
-    Debug(1, f'Calculating visible satellites...')
+    Debug(1, f'Calculating FOV using: {self.fov_obj.__str__()}')
     los_sats = self.__sats_in_fov(pos, all_sats)
     Debug(1, f'Done. {time.perf_counter()-now:.3f}s\n')
 
@@ -300,7 +316,7 @@ def test():
   drone_data = '/test_data_full.csv'
   #output = '/test_data/test_data-gdop.csv'
 
-  gdoper = Calc_manager(drone_data, ts=10)
+  gdoper = CalcManager(drone_data)
   gdoper.set_FOV(FOV_view_match())
   gdoper.add_calc(Calc_gdop())
   gdoper.process_data()

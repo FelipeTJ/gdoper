@@ -8,8 +8,8 @@ import src.reader_pos_data as rps
 import datetime as dt
 import src.common as cm
 
-from src.calc_manager import Calc_manager
-from src.fov_models import FOV_constant_mask, FOV_treeline, FOV_view_match
+from src.calc_manager import CalcManager, ManagerOptions
+from src.fov_models import *
 from src.calcs import Calc_gdop
 from src.d_print import Debug,Info, Stats, Set_PrintLevel
 
@@ -33,7 +33,10 @@ def parse_input() -> dict:
       default_test(fn)
 
 def single_gdoper(in_file, in_dir, out_dir):
-  gdoper = Calc_manager(in_file, data_folder=in_dir, out_folder=out_dir, ts=SAMPLING)
+
+  m_opts = ManagerOptions(folder_input=in_dir, folder_output=out_dir)
+
+  gdoper = CalcManager(in_file, m_opts=m_opts)
   gdoper.set_FOV(FOV_view_match())
   gdoper.add_calc(Calc_gdop())
   gdoper.process_data()
@@ -49,6 +52,7 @@ def batch_process(in_dir, out_dir, func, stats=True, skip_existing=True):
 
   if func.__name__ == 'single_gdoper' and skip_existing:
     Info(f'Skipping files that have already been processed.')
+    Info(f'In dir: {out_dir}')
     Info(f'Set skip_existing=False to re-process the files\n')
 
   for file in os.listdir(in_dir):
@@ -72,7 +76,7 @@ def flight_time_counter(in_file, in_dir, out_dir):
 
   f_dir = in_dir + SE + in_file
 
-  r = rps.Pos_data(f_dir)
+  r = rps.ReaderPos(f_dir)
   r.setup()
 
   data = r.get_merged_cols(cm.CHN_UTC)
@@ -88,7 +92,7 @@ def speed_counter(in_file, in_dir, out_dir):
 
   f_dir = in_dir + SE + in_file
 
-  r = rps.Pos_data(f_dir)
+  r = rps.ReaderPos(f_dir)
   r.setup()
 
   data = r.get_merged_cols('speed(m/s)')
@@ -102,18 +106,23 @@ def speed_counter(in_file, in_dir, out_dir):
 
   pass
 
-def fov_test(in_file, mask_a, mask_m):
+def fov_test(in_file, out_file, mask_a, mask_m):
 
   drone_data = in_file
-  out_name = f'fov_test_gdoper_{mask_a}.csv'
 
-  fov = FOV_treeline()
-  fov.setup(mask_a, min_mask=mask_m)
+  fov = FOV_constant_mask2()
+  fov.setup(mask_a)
 
-  gdoper = Calc_manager(drone_data, out_file=out_name, ts=5, debug=1)  # ts is the sampling time from position data
+  m_opts = ManagerOptions(file_oname=out_file)
+
+  gdoper = CalcManager(drone_data, m_opts=m_opts, debug=1)  # ts is the sampling time from position data
   gdoper.set_FOV(fov)
   gdoper.add_calc(Calc_gdop())
   gdoper.process_data()
+
+  #gdoper.opts.file_output = out_name[:-4] + '_2.csv'
+  #gdoper.set_FOV(FOV_treeline(mask_a, min_mask=mask_m))
+  #gdoper.process_data()
 
   #plotting_test(out_name)
 
@@ -122,20 +131,29 @@ def fov_test(in_file, mask_a, mask_m):
   #gdoper.process_data()
   #plotting_test(gdoper.output_file)
 
+def rinex_test(in_file):
+  drone_data = in_file
+
+  gdoper = CalcManager(drone_data, ts=5, debug=1, rinex_file='FINS00FIN_R_20210280000_01D_MN.rnx')  # ts is the sampling time from position data
+  gdoper.set_FOV(FOV_view_match())
+  gdoper.add_calc(Calc_gdop())
+  gdoper.process_data()
+  pass
+
 def default_test(in_file):
   drone_data = in_file
 
-  gdoper = Calc_manager(drone_data, ts=5, debug=1)  # ts is the sampling time from position data
+  gdoper = CalcManager(drone_data, ts=5, debug=1)  # ts is the sampling time from position data
   gdoper.set_FOV(FOV_view_match())
   gdoper.add_calc(Calc_gdop())
   gdoper.process_data()
 
-def plotting_test(in_file, in_dir=cm.POS_DATA_FOLDER, out_dir=cm.POS_DATA_FOLDER, sat_name=cm.CHN_SAT, grid=False):
+def plotting_test(in_file, in_dir=cm.POS_DATA_FOLDER, out_dir=cm.POS_DATA_FOLDER, sat_name=cm.CHN_SAT, grid=False, lims=True):
 
-  drone_data = in_dir + SE + in_file
-  out_file = out_dir + SE + in_file[:-4]
+  drone_data = in_dir + os.sep + in_file
+  out_file = out_dir + os.sep + in_file[:-4]
   
-  r = rps.Pos_data(drone_data)
+  r = rps.ReaderPos(drone_data)
   r.setup()
 
   data = r.get_merged_cols(cm.CHN_LON, cm.CHN_LAT, cm.CHN_ALT, cm.CHN_UTC, sat_name, 'GDOP', 'HDOP', 'VDOP')
@@ -157,8 +175,18 @@ def plotting_test(in_file, in_dir=cm.POS_DATA_FOLDER, out_dir=cm.POS_DATA_FOLDER
 
   xstart = 61.4502
   xticks = 7
+  if "back_50" in in_file:
+    xstart = 61.4498
+    xticks = 8
+  elif "front_lawn" in in_file:
+    xstart = 61.4484
+    xticks = 7
+  elif "back_parking" in in_file:
+    xstart = 61.4502
+    xticks = 7
+
   xstep = 0.0002
-  xstop = xstart + xticks*xstep
+  #xstop = xstart + xticks*xstep
   xlabs = [f'{xstart:.4f}']
   xl = []
   for i in range(xticks):
@@ -166,42 +194,52 @@ def plotting_test(in_file, in_dir=cm.POS_DATA_FOLDER, out_dir=cm.POS_DATA_FOLDER
     if i == 0 or i == xticks-1: continue
     xlabs.append(f'+{i*xstep:.4f}')
   xlabs.append('')
-  print(xlabs)
-  print(xl)
 
   ystart = 23.8620
   yticks = 9
   ystep = 0.0005
-  ystop = ystart + yticks*ystep
+  if "back_50" in in_file:
+    ystart = 23.8602
+    yticks = 9
+    ystep = 0.0002
+  elif "front_lawn" in in_file:
+    ystart = 23.8545
+    yticks = 7
+    ystep = 0.0005
+  elif "back_parking"in in_file:
+    ystart = 23.8620
+    yticks = 9
+    ystep = 0.0005
+  #ystop = ystart + yticks*ystep
   ylabs = ['', f'{ystart:.4f}']
   yl = []
   for i in range(yticks):
     yl.append(ystart+i*ystep)
     if i == 0 or i == yticks-1: continue
     ylabs.append(f'+{i*ystep:.4f}')
-  print(ylabs)
-  print(len(yl))
 
-  ax.set_xlabel('Latitude', labelpad=12.0)
+  ax.set_xlabel('Latitude (°)', labelpad=12.0)
   ax.set_xticks(xl)
   ax.set_xticklabels(xlabs, fontsize='small', rotation=15.0)
   #ax.set_xticklabels([])
 
-  ax.set_ylabel('Longitude', labelpad=14.0)
+  ax.set_ylabel('Longitude (°)', labelpad=14.0)
   ax.set_yticks(yl)
   ax.set_yticklabels(ylabs, fontsize='small', rotation=-10.0)
   #ax.set_yticklabels([])
 
-  ax.set_zlabel('Altitude (sea) m')
+  ax.set_zlabel('Altitude above sea (m)')
 
   ax.view_init(elev=30, azim=-55)
 
   fn = out_file + '_plot_path'
 
   plt.grid()
-  plt.title('Path followed by drone', pad=2.0)
+  #plt.title('Path followed by drone', pad=2.0)
   plt.savefig(fn+'.pdf', format='pdf', bbox_inches='tight')
   plt.close('all')
+
+  Info(f'Plotted path for: {out_file.split(os.sep)[-1]}')
 
 
   """        GDOP and sats plot           """
@@ -220,7 +258,7 @@ def plotting_test(in_file, in_dir=cm.POS_DATA_FOLDER, out_dir=cm.POS_DATA_FOLDER
 
   fig, (ax1,ax2) = plt.subplots(nrows=2, ncols=1, figsize=(9,8))
 
-  fig.suptitle('Satellites in view and DOPs',y=0.92)
+  #fig.suptitle('Satellites in view and DOPs',y=0.92)
 
   ax1.plot(t, s, label='Satellites in view')
   ax2.plot(t, g, label='GDOP')
@@ -228,15 +266,17 @@ def plotting_test(in_file, in_dir=cm.POS_DATA_FOLDER, out_dir=cm.POS_DATA_FOLDER
   ax2.plot(t, h, label='HDOP')
 
   ax1.legend(loc='best')
-  ax1.set_xlim(-5,t[-1]+5)
-  ax1.set_xlabel('Seconds')
-  ax1.set_ylim(10, 25)
+  ax1.set_xlabel('time (s)')
+  ax1.set_ylabel('Number of visible satellites')
+  if lims: ax1.set_xlim(-5,t[-1]+5)
+  if lims: ax1.set_ylim(10, 25)
   if grid: ax1.grid()
 
   ax2.legend()
-  ax2.set_xlim(-5,t[-1]+5)
-  ax2.set_xlabel('Seconds')
-  ax2.set_ylim(0.1, 1.7)
+  ax2.set_xlabel('time (s)')
+  ax2.set_ylabel('DOP value')
+  if lims: ax2.set_xlim(-5,t[-1]+5)
+  if lims: ax2.set_ylim(0.1, 1.7)
   if grid: ax2.grid()
 
   fn = out_file + '_plot_DOPS'
@@ -244,12 +284,14 @@ def plotting_test(in_file, in_dir=cm.POS_DATA_FOLDER, out_dir=cm.POS_DATA_FOLDER
   plt.savefig(fn+'.pdf', format='pdf', bbox_inches='tight')
   plt.close('all')
 
+  Info(f'Plotted DOPS and Sats for: {out_file.split(os.sep)[-1]}')
 
+# TODO: finish plots
 def fov_plots(in_file, in_dir=cm.POS_DATA_FOLDER, out_dir=cm.POS_DATA_FOLDER):
   drone_data = in_dir + SE + in_file
   out_file = out_dir + SE + in_file[:-4]
   
-  r = rps.Pos_data(drone_data)
+  r = rps.ReaderPos(drone_data)
   r.setup()
 
   s1_n = 'sats_treeline'
@@ -300,7 +342,7 @@ def alt2gdop_getter(in_file, in_dir, out_dir, d):
 
   drone_data = in_dir + SE + in_file
   
-  r = rps.Pos_data(drone_data)
+  r = rps.ReaderPos(drone_data)
   r.setup()
 
   data = r.get_merged_cols(cm.CHN_ALT, 'GDOP', 'VDOP', 'HDOP')
@@ -380,7 +422,7 @@ def sats2gdop_getter(in_file, in_dir, out_dir, d):
 
   drone_data = in_dir + SE + in_file
   
-  r = rps.Pos_data(drone_data)
+  r = rps.ReaderPos(drone_data)
   r.setup()
 
   data = r.get_merged_cols(cm.CHN_SAT, 'GDOP', 'VDOP', 'HDOP')
@@ -452,7 +494,7 @@ def alt2sats_getter(in_file, in_dir, out_dir, d):
 
   drone_data = in_dir + SE + in_file
   
-  r = rps.Pos_data(drone_data)
+  r = rps.ReaderPos(drone_data)
   r.setup()
 
   data = r.get_merged_cols(cm.CHN_ALT, cm.CHN_SAT)

@@ -25,13 +25,13 @@ import src.common as cm
 os.chdir('..')  # gdoper.py directory
 
 
-class Pos_data():
+class ReaderPos():
   def __init__(self, filename):
     self.filename = filename
     self.var_count = 0
     self.row_count = 0
     self.data = {}
-    self.done_setup = False
+    self.is_setup = False
     self.debuging = 'none'
 
 
@@ -40,13 +40,13 @@ class Pos_data():
     if not os.path.exists(self.filename):
       raise Exception(f'"{self.filename}" does not exist. Input full dir.')
     
-    self.done_setup = True
+    self.is_setup = True
     self.data = self.get_ordered_data()
 
     #Debug('Done setup\n')
 
   def setup_check(self):
-    if not self.done_setup: 
+    if not self.is_setup: 
       raise Exception('Pos_data has not been set up.')
 
 
@@ -149,7 +149,7 @@ def test_run():
 
   test_file = cm.POS_DATA_FOLDER + os.sep + 'test_data.csv'
 
-  d = Pos_data(test_file)
+  d = ReaderPos(test_file)
   d.setup()
   d.print_titles()
   d.get_merged_cols('latitude', 'longitude', 'altitude_above_seaLevel(meters)', 'datetime(utc)', 'satellites')
