@@ -38,6 +38,7 @@ GDOP_ONLY = 1
 
 # Angle from horizon for FOV mask (in degrees)
 LOS_ANGLE = 5
+NO_MASK = -999
 
 NOM_GPS_RAD = 26600000  # in meters
 

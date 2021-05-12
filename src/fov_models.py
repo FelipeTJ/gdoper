@@ -6,7 +6,7 @@ import numpy as np
 import datetime as dt
 
 import src.common as cm
-from src.d_print import Debug, GREEN, RED, VIOLET, CEND
+from src.d_print import Debug, Enable_Debug, GREEN, RED, VIOLET, CEND
 from decimal import *
 
 class FOV_model:
@@ -38,6 +38,23 @@ class FOV_model:
       The heirarchy is: {'time': {'prn': (x,y,z) } }
     """
     raise Exception('SubClass.get_sats() not defined')
+
+
+class FOV_empty(FOV_model):
+  def __init__(self):
+      super().__init__()
+  
+  def __str__(self) -> str:
+      return 'FOV_empty'
+
+  def setup(self) -> None:
+    self.is_setup = True
+
+  def required_vars(self) -> List[str]:
+      return [cm.CHN_LAT, cm.CHN_LON, cm.CHN_ALT, cm.CHN_UTC]
+
+  def get_sats(self, pos_data, sats_data) -> Mapping[str, Mapping[str, Tuple[float, float, float]]]:
+      return super().get_sats(pos_data, sats_data)
 
 
 class FOV_view_match(FOV_model):
@@ -113,9 +130,13 @@ class FOV_view_match(FOV_model):
     return sats_LOS
 
 class FOV_constant_mask(FOV_model):
-  def __init__(self, mask_angle = -999):
+  def __init__(self, mask_angle = cm.NO_MASK):
     super().__init__()
     self.m_a = cm.deg2rad(int(mask_angle)) # Mask angle
+    self.th_calc = lambda u, *args: self.__get_threshold(u, *args)
+    self.sv2th_calc = lambda s, *args: self.__get_value(s, *args)
+    if mask_angle != cm.NO_MASK:
+      self.is_setup = True
   
   def __str__(self) -> str:
       return 'FOV_constant_mask'
@@ -131,7 +152,7 @@ class FOV_constant_mask(FOV_model):
     except:
       raise Exception('Input mask angle must be convertible to int type')
 
-    if self.m_a != cm.deg2rad(-999):
+    if self.m_a != cm.deg2rad(cm.NO_MASK):
       Debug(1,f'Changing mask angle: ({cm.rad2deg(self.m_a)}º) -> ({mask_a}º)')
 
     self.m_a = cm.deg2rad(mask_a)
@@ -142,6 +163,15 @@ class FOV_constant_mask(FOV_model):
       Return the variables required to calculate FOV for this model
     """
     return [cm.CHN_LAT, cm.CHN_LON, cm.CHN_ALT, cm.CHN_UTC]
+
+  def __get_threshold(self, u, *args):
+    th_a = math.pi/2 - self.m_a  -\
+            math.asin(math.cos(self.m_a) / cm.NOM_GPS_RAD \
+                      * np.linalg.norm(u))
+    return math.cos(th_a)
+
+  def __get_value(self, sat_pos, normalized_u, *args):
+    return np.dot(normalized_u, sat_pos/np.linalg.norm(sat_pos))
 
   def get_sats(self, pos_pos, sats_pos) -> Mapping[str, Mapping[str, Tuple[float, float, float]]]:
     """
@@ -167,40 +197,13 @@ class FOV_constant_mask(FOV_model):
       u = np.array(cm.lla2ecef(lat, lon, alt))
       n_u = u/np.linalg.norm(u)
 
-      """ Calculate threshold point from user location """
-
-      # Angle between user and threshold point
-      th_a = math.pi/2 - self.m_a  -\
-            math.asin(math.cos(self.m_a) / cm.NOM_GPS_RAD \
-                      * np.linalg.norm(u))
-
-      # # Mask vector length
-      # m_l = math.sin(th_a)*c.NOM_GPS_RAD/math.sin(self.m_a + math.pi/2)
-
-      # # Create user pos projection on ecuatorial plane
-      # z_ax = np.array([0, 0, 1])
-      # u_p = u - np.dot(u, z_ax)*z_ax
-      # u_p = c.normalize(u_p)
-
-      # # Angle of the horizon
-      # h = (lat - 90)/180 * math.pi
-
-      # # Create mask vector (from user to threshold point)
-      # m_v = u_p*math.cos(h + self.m_a) + z_ax*math.sin(h + self.m_a)
-      # m_v = m_v * m_l
-
-
-      # # Threshold point vector (from ECEF origin to the point)
-      # th_v = u + m_v
-      # th_v = c.normalize(th_v)
-
-      threshold = math.cos(th_a) #np.dot(n_u, th_v)
+      threshold = self.th_calc(u, lat)
       Debug(2,f'Threshold value: {RED}{threshold}{CEND}')
 
       # Calculate dot prod to all sats
       for sat in sats_pos[t]:
         s = np.array(sats_pos[t][sat])
-        d = np.dot(n_u, s/np.linalg.norm(s))
+        d = self.sv2th_calc(s, n_u, u)
         if d >= threshold:
           sats_LOS[t][sat] = sats_pos[t][sat]
           Debug(3,f'dot for {sat}: {GREEN}{d}{CEND}')
@@ -209,13 +212,65 @@ class FOV_constant_mask(FOV_model):
 
     return sats_LOS
 
+class FOV_constant_mask_old(FOV_constant_mask):
+  def __init__(self, mask_angle=cm.NO_MASK):
+    super().__init__(mask_angle=mask_angle)
+    
+  def __str__(self) -> str:
+      return 'FOV_constant_mask_old'
+
+  def __get_threshold(self, u, lat, *args):
+    #Angle between user and threshold point
+    th_a = math.pi/2 - self.m_a  -\
+          math.asin(math.cos(self.m_a) / cm.NOM_GPS_RAD \
+                    * np.linalg.norm(u))
+
+    # Mask vector length
+    m_l = math.sin(th_a)*cm.NOM_GPS_RAD/math.sin(self.m_a + math.pi/2)
+
+    # Create user pos projection on ecuatorial plane
+    z_ax = np.array([0, 0, 1])
+    u_p = u - np.dot(u, z_ax)*z_ax
+    u_p = cm.normalize(u_p)
+
+    # Angle of the horizon
+    h = (lat - 90)/180 * math.pi
+
+    # Create mask vector (from user to threshold point)
+    m_v = u_p*math.cos(h + self.m_a) + z_ax*math.sin(h + self.m_a)
+    m_v = m_v * m_l
+
+
+    # Threshold point vector (from ECEF origin to the point)
+    th_v = u + m_v
+    th_v = cm.normalize(th_v)
+    return np.dot(cm.normalize(u), th_v)
+
+
+class FOV_constant_mask2(FOV_constant_mask):
+  def __init__(self):
+    super().__init__()
+  
+  def __str__(self) -> str:
+    return 'FOV_constant_mask2'
+
+  def __get_threshold(self, u, *args):
+    return self.m_a
+
+  def __get_value(self, sat_pos, n_u, u, *args):
+    n = sat_pos - u
+    n = n/np.linalg.norm(n)
+
+    return math.acos(np.dot(n_u, n))
 
 class FOV_treeline(FOV_model):
-  def __init__(self, max_mask:int = -999, tree_height:float = -999, min_mask:int = 5):
+  def __init__(self, max_mask:int = cm.NO_MASK, tree_height:float = 20, min_mask:int = 5):
     super().__init__()
     self.mx_m_a = cm.deg2rad(max_mask)
     self.tl_h = tree_height
     self.mn_m_a = cm.deg2rad(min_mask)
+    if max_mask != cm.NO_MASK:
+      self.is_setup = True
   
   def __str__(self) -> str:
       return 'FOV_treeline'
@@ -239,7 +294,7 @@ class FOV_treeline(FOV_model):
       raise Exception(f'The MAXimum mask angle ({mask_a})\
          cannot be smaller than the MINimum mask angle ({mask_m})')
 
-    if self.mx_m_a != cm.deg2rad(-999) and self.mx_m_a != cm.deg2rad(mask_a):
+    if self.mx_m_a != cm.deg2rad(cm.NO_MASK) and self.mx_m_a != cm.deg2rad(mask_a):
       Debug(1,f'Changing max mask angle: ({cm.rad2deg(self.mx_m_a)}º) -> ({mask_a}º)')
 
     self.mx_m_a = cm.deg2rad(mask_a)
@@ -254,8 +309,9 @@ class FOV_treeline(FOV_model):
     except:
       raise Exception('Input tree line height must be convertible to float type')
 
-    if self.mx_m_a != -999 and self.tl_h != tree_h:
+    if self.mx_m_a != cm.NO_MASK and self.tl_h != tree_h:
       Debug(1,f'Changing tree line height: ({self.tl_h}m) -> ({tree_h}m)')
+      self.tl_h = tree_h
 
     self.is_setup = True
 

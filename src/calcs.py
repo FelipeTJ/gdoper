@@ -27,6 +27,9 @@ class Calc_gdop(Calc):
     super().__init__()
     pass
 
+  def __str__(self) -> str:
+      return 'Calc_DOPs'
+
   def get_chn(self) -> List[str]:
     return ['HDOP', 'VDOP', 'GDOP']
 
