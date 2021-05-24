@@ -14,9 +14,9 @@
 
 
 # %%
+from src import *
 import os
 import csv
-import xarray as xr
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 from src.d_print import Debug,Info
@@ -32,31 +32,34 @@ class ReaderPos():
     self.row_count = 0
     self.data = {}
     self.is_setup = False
-    self.debuging = 'none'
 
-
-  # TODO: Create setup function
   def setup(self):
+    """
+      Process the file given the filename provided at initialization
+    """
     if not os.path.exists(self.filename):
       raise Exception(f'"{self.filename}" does not exist. Input full dir.')
     
     self.is_setup = True
-    self.data = self.get_ordered_data()
+    self.data = self.__get_ordered_data()
 
-    #Debug('Done setup\n')
+    #Debug(1,'Done setup\n')
 
-  def setup_check(self):
+  def __setup_check(self):
     if not self.is_setup: 
       raise Exception('Pos_data has not been set up.')
 
 
-  def get_ordered_data(self) -> dict:
-    self.setup_check()
+  def __get_ordered_data(self) -> dict:
+    """
+      Organize the read data from file provided at initialization
+    """
+    self.__setup_check()
 
     ordered = {}
     titles = []
     data = []
-    titles, data = self.read_csv()
+    titles, data = self.__read_csv()
 
     # Convert the rows of all data into columns with header names (transpose)
     for i in range(self.row_count):
@@ -70,8 +73,11 @@ class ReaderPos():
     return ordered
  
 
-  def read_csv(self) -> cm.t.Tuple[cm.t.List[str], list]:
-    self.setup_check()
+  def __read_csv(self) -> Tuple[List[str], list]:
+    """
+      Read data from file provided at initialization
+    """
+    self.__setup_check()
 
     titles = []
     data = []
@@ -97,8 +103,12 @@ class ReaderPos():
 
 
   def get_col(self, col_name):
-    self.setup_check()
+    """
+      Return the data for the provided CHN
+    """
+    self.__setup_check()
 
+    # LINK[epic=formats] src/reader_rinex.py#time 
     if col_name in self.data.keys():
       return self.data[col_name]
     else:
@@ -107,20 +117,23 @@ class ReaderPos():
 
 
   def get_merged_cols(self, *cols) -> dict:
-    self.setup_check()
+    """
+      Return the requested CHNs from the read file
+    """
+    self.__setup_check()
 
     if len(cols) == 1 and (type(cols[0]) == tuple or type(cols[0]) == list):
       cols = cols[0]
       
-    Debug(2,f'Merging columns: {cols}')
+    Debug(1,f'Merging columns: {cols}')
     new_cols = {}
     for i in cols:
       if i not in self.data.keys():
-        raise Exception(f'Variable \'{i}\' does not exist in this file.{self.filename}')
+        raise Exception(f'Variable \'{i}\' does not exist in this file: \n{self.filename}')
     
       new_cols[i] = self.get_col(i)
 
-    Debug(3,f'new_cols: {new_cols}')
+    Debug(2,f'new_cols: {new_cols}')
     return new_cols
 
 
@@ -128,19 +141,31 @@ class ReaderPos():
     """
       Returns the first available date in the data
     """
-    self.setup_check()
+    self.__setup_check()
 
+    # TODO[epic=formats,seq=406] Get the first and last times
+    #   and make sure we have the correct dates for it
     # TODO: make the column names more flexible
     return self.get_col(cm.CHN_UTC)[0]
 
 
   def print_titles(self):
-    self.setup_check()
+    """
+      Prints the Column Header Names (CHNs) of the read data.
+      Useful for checking if CHN names are correct
+    """
+    self.__setup_check()
 
     Info('Variable names:')
     for i in list(self.data.keys()):
       Info(f' - {i}')
     print()
+
+
+
+
+
+
 
 
 def test_run():

@@ -21,7 +21,7 @@ def Set_PrintLevel(lvl):
   global PrintLevel
   PrintLevel = int(lvl)
 
-def Enable_Debug(pl:int = 0):
+def Enable_Debug(pl:int = PrintLevel):
   global EnabledPrints
   Set_PrintLevel(pl)
   func_name = ins.stack()[1].function

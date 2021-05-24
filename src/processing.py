@@ -8,9 +8,10 @@ import src.reader_pos_data as rps
 import datetime as dt
 import src.common as cm
 
+from src.common import CSTL
 from src.calc_manager import CalcManager, ManagerOptions
-from src.fov_models import *
-from src.calcs import Calc_gdop
+from src.fov_models import FOV_constant_mask, FOV_treeline, FOV_view_match
+from src.calcs import Calc_gdop, Calc_wgdop
 from src.d_print import Debug,Info, Stats, Set_PrintLevel
 
 SAMPLING = 5
@@ -20,28 +21,35 @@ mean_speed = []
 max_speed = 0.0
 tot_time = dt.timedelta(seconds=0)
 
+skip = True
+
 # TODO: implement parsing
 def parse_input() -> dict:
-  argn = len(sys.argv)
-  
-  if argn <= 1:
-    return
-  
-  for i in range(argn):
-    if sys.argv[i] == 'demo':
-      fn = 'test_data_full.csv'
-      default_test(fn)
+	argn = len(sys.argv)
+
+	if argn <= 1:
+		return
+
+	for i in range(argn):
+		if sys.argv[i] == 'demo':
+			fn = 'test_data_full.csv'
+			default_test(fn)
+		elif sys.argv[i] == '-f':
+			global skip
+			skip = False
 
 def single_gdoper(in_file, in_dir, out_dir):
 
-  m_opts = ManagerOptions(folder_input=in_dir, folder_output=out_dir)
+  opts = ManagerOptions(folder_input=in_dir, folder_output=out_dir)
+  fov = FOV_view_match([CSTL.GPS, CSTL.GAL])
+  fov.add_calc(Calc_gdop(CSTL.GPS))
+  fov.add_calc(Calc_gdop(CSTL.GAL))
 
-  gdoper = CalcManager(in_file, m_opts=m_opts)
-  gdoper.set_FOV(FOV_view_match())
-  gdoper.add_calc(Calc_gdop())
+  gdoper = CalcManager(in_file, m_opts=opts)
+  gdoper.add_FOV(fov)
   gdoper.process_data()
 
-def batch_process(in_dir, out_dir, func, stats=True, skip_existing=True):
+def batch_process(in_dir, out_dir, func, stats=True):
   if not os.path.exists(in_dir):
       raise Exception(f'"{in_dir}" does not exist. Input full directory path')
 
@@ -49,11 +57,14 @@ def batch_process(in_dir, out_dir, func, stats=True, skip_existing=True):
     os.mkdir(out_dir)
 
   start = time.perf_counter()
+  skip_existing = skip
 
   if func.__name__ == 'single_gdoper' and skip_existing:
-    Info(f'Skipping files that have already been processed.')
-    Info(f'In dir: {out_dir}')
-    Info(f'Set skip_existing=False to re-process the files\n')
+    Info(f'Skipping files that already have been processed')
+    Info(f'in other words: the corresponding file with _gdoper extension exists in:\n {out_dir}')
+    Info(f'In dir: {in_dir}')
+    Info(f'Out dir: {out_dir}')
+    Info(f'Set skip_existing=False to process all files\n')
 
   for file in os.listdir(in_dir):
     if file[-4:] != '.csv': continue
@@ -106,30 +117,150 @@ def speed_counter(in_file, in_dir, out_dir):
 
   pass
 
+def basic_test(in_file, in_dir):
+
+  out_dir = in_dir+'_gdoper'
+  opts = ManagerOptions(folder_input=in_dir, folder_output=out_dir)
+  
+  fov = FOV_view_match([CSTL.GPS, CSTL.GAL])
+  fov.add_calc(Calc_gdop(CSTL.GPS))
+  fov.add_calc(Calc_gdop(CSTL.GAL))
+  fov.add_calc(Calc_wgdop())
+
+  manager = CalcManager(in_file, opts, debug=0)
+  manager.add_FOV(fov)
+  manager.process_data()
+
+def basic_test2(in_file, in_dir):
+
+  out_name = in_file[:-4]+'_models_gdoper.csv'
+  out_dir = in_dir+'_gdoper'
+  opts = ManagerOptions(file_oname=out_name, folder_input=in_dir, folder_output=out_dir)
+  manager = CalcManager(in_file, opts)
+
+  fov1 = FOV_view_match([CSTL.GPS, CSTL.GAL])
+  fov1.add_calc(Calc_wgdop())
+
+  fov2 = FOV_constant_mask(20, cstls=[CSTL.GPS, CSTL.GAL])
+  fov2.add_calc(Calc_wgdop())
+
+  fov3 = FOV_treeline(20, cstls=[CSTL.GPS, CSTL.GAL])
+  fov3.add_calc(Calc_wgdop())
+
+  manager.add_FOV(fov1)
+  manager.add_FOV(fov2)
+  manager.add_FOV(fov3)
+  manager.process_data()
+
 def fov_test(in_file, out_file, mask_a, mask_m):
 
-  drone_data = in_file
+  # drone_data = in_file
 
-  fov = FOV_constant_mask2()
-  fov.setup(mask_a)
+  # fov = FOV_constant_mask2()
+  # fov.setup(mask_a)
 
-  m_opts = ManagerOptions(file_oname=out_file)
+  # m_opts = ManagerOptions(file_oname=out_file)
 
-  gdoper = CalcManager(drone_data, m_opts=m_opts, debug=1)  # ts is the sampling time from position data
-  gdoper.set_FOV(fov)
-  gdoper.add_calc(Calc_gdop())
-  gdoper.process_data()
+  # gdoper = CalcManager(drone_data, m_opts=m_opts, debug=1)  # ts is the sampling time from position data
+  # gdoper.set_FOV(fov)
+  # gdoper.add_calc(Calc_gdop())
+  # gdoper.process_data()
 
-  #gdoper.opts.file_output = out_name[:-4] + '_2.csv'
-  #gdoper.set_FOV(FOV_treeline(mask_a, min_mask=mask_m))
-  #gdoper.process_data()
+  #plotting_test(out_file)
 
-  #plotting_test(out_name)
+  # gdoper.opts.file_oname = out_file[:-4] + '_2.csv'
+  # gdoper.set_FOV(FOV_treeline(mask_a, min_mask=mask_m))
+  # gdoper.process_data()
+
+  #plotting_test(gdoper.opts.file_oname)
 
   #fov.setup(mask_a - 5)
   #gdoper.output_file = out_name[:-6]+f'{mask_a - 5}.csv'
   #gdoper.process_data()
   #plotting_test(gdoper.output_file)
+
+
+  drone_data = cm.BASE_FOLDER + os.sep + 'Thesis_data_gdoper' + os.sep + in_file
+  out_file = cm.BASE_FOLDER + os.sep + 'Thesis_data_plots' + os.sep + in_file[:-4]
+  
+  r = rps.ReaderPos(drone_data)
+  r.setup()
+  if mask_a == 0:
+    mask_a = ''
+
+  cols = [cm.CHN_LON, cm.CHN_LAT, cm.CHN_ALT, cm.CHN_UTC]
+  #cols.append(f'gps_GDOP_match{mask_a}')
+  #cols.append(f'gal_GDOP_match{mask_a}')
+  cols.append(f'wGDOP_match{mask_a}')
+  cols.append(f'wGDOP_constm{mask_a}')
+  cols.append(f'wGDOP_tree{mask_a}')
+  #cols.append(f'GDOP_match{mask_a}')
+  #cols.append('GDOP_match2')
+  #cols.append('GDOP_constm')
+  #cols.append('GDOP_tree')
+
+  # cols.append(f'gps_sats_FOV_match{mask_a}')
+  # cols.append(f'gal_sats_FOV_match{mask_a}')
+  cols.append(f'sats_FOV_match{mask_a}')
+  cols.append(f'sats_FOV_constm{mask_a}')
+  cols.append(f'sats_FOV_tree{mask_a}')
+  #cols.append('sats_FOV_match2')
+  #cols.append('sats_FOV_constm')
+  #cols.append('sats_FOV_tree')
+
+  data = r.get_merged_cols(cols)
+
+  """        GDOP and sats plot           """
+
+  s1 = [float(i) for i in data[f'sats_FOV_match{mask_a}']]
+  s2 = [float(i) for i in data[f'sats_FOV_constm{mask_a}']]
+  s3 = [float(i) for i in data[f'sats_FOV_tree{mask_a}']]
+
+  g1 = [float(i) for i in data[f'wGDOP_match{mask_a}']]
+  g2 = [float(i) for i in data[f'wGDOP_constm{mask_a}']]
+  g3 = [float(i) for i in data[f'wGDOP_tree{mask_a}']]
+  #g4 = [float(i) for i in data[f'GDOP_match{mask_a}']]
+
+  t0 = data[cm.CHN_UTC][0]
+  t0 = dt.datetime.fromisoformat(t0)
+  t = [(dt.datetime.fromisoformat(i) - t0).seconds for i in data[cm.CHN_UTC]]
+
+  plt.clf()
+  plt.cla()
+
+  fig, (ax1,ax2) = plt.subplots(nrows=2, ncols=1, figsize=(9,8))
+
+  #fig.suptitle('Satellites in view and DOPs',y=0.92)
+  lims = True
+  grid = False
+
+  ax1.plot(t, s1, label='FOV view match')
+  ax1.plot(t, s2, label='FOV const. mask')
+  ax1.plot(t, s3, label='FOV treeline')
+  ax2.plot(t, g1, label='WGDOP from view match FOV')
+  ax2.plot(t, g2, label='WGDOP from const. mask FOV')
+  ax2.plot(t, g3, label='WGDOP from treeline FOV')
+
+  ax1.legend(loc='lower center')
+  ax1.set_xlabel('time (s)')
+  ax1.set_ylabel('Number of visible satellites')
+  if lims: ax1.set_xlim(-5,t[-1]+5)
+  if lims: ax1.set_ylim(10, 30)
+  if grid: ax1.grid(axis='y')
+
+  ax2.legend(loc='upper center')
+  ax2.set_xlabel('time (s)')
+  ax2.set_ylabel('DOP value')
+  if lims: ax2.set_xlim(-5,t[-1]+5)
+  if lims: ax2.set_ylim(0.1, 3)
+  if grid: ax2.grid(axis='y')
+
+  fn = out_file + '_plot_DOPS'
+
+  plt.savefig(fn+'.pdf', format='pdf', bbox_inches='tight')
+  plt.close('all')
+
+  Info(f'Plotted DOPS and Sats for: {out_file.split(os.sep)[-1]}')
 
 def rinex_test(in_file):
   drone_data = in_file
@@ -156,7 +287,7 @@ def plotting_test(in_file, in_dir=cm.POS_DATA_FOLDER, out_dir=cm.POS_DATA_FOLDER
   r = rps.ReaderPos(drone_data)
   r.setup()
 
-  data = r.get_merged_cols(cm.CHN_LON, cm.CHN_LAT, cm.CHN_ALT, cm.CHN_UTC, sat_name, 'GDOP', 'HDOP', 'VDOP')
+  data = r.get_merged_cols(cm.CHN_LON, cm.CHN_LAT, cm.CHN_ALT, cm.CHN_UTC, sat_name, 'GDOP', 'HDOP', 'VDOP', 'TDOP')
 
 
   """          Drone path plot            """
@@ -247,6 +378,7 @@ def plotting_test(in_file, in_dir=cm.POS_DATA_FOLDER, out_dir=cm.POS_DATA_FOLDER
   g = [float(i) for i in data['GDOP']]
   v = [float(i) for i in data['VDOP']]
   h = [float(i) for i in data['HDOP']]
+  td = [float(i) for i in data['TDOP']]
   s = [float(i) for i in data[sat_name]]
 
   t0 = data[cm.CHN_UTC][0]
@@ -264,6 +396,7 @@ def plotting_test(in_file, in_dir=cm.POS_DATA_FOLDER, out_dir=cm.POS_DATA_FOLDER
   ax2.plot(t, g, label='GDOP')
   ax2.plot(t, v, label='VDOP')
   ax2.plot(t, h, label='HDOP')
+  #ax2.plot(t, td, label='TDOP')
 
   ax1.legend(loc='best')
   ax1.set_xlabel('time (s)')
@@ -276,7 +409,7 @@ def plotting_test(in_file, in_dir=cm.POS_DATA_FOLDER, out_dir=cm.POS_DATA_FOLDER
   ax2.set_xlabel('time (s)')
   ax2.set_ylabel('DOP value')
   if lims: ax2.set_xlim(-5,t[-1]+5)
-  if lims: ax2.set_ylim(0.1, 1.7)
+  if lims: ax2.set_ylim(0.1, 5)
   if grid: ax2.grid()
 
   fn = out_file + '_plot_DOPS'
@@ -586,17 +719,17 @@ def get_batch_stats(in_dir, print_lvl, plot=False):
 
   start = time.perf_counter()
 
-  batch_process(in_dir, '', flight_time_counter, stats=False, skip_existing=False)
-  batch_process(in_dir, '', speed_counter, stats=False, skip_existing=False)
+  batch_process(in_dir, '', flight_time_counter, stats=False)
+  batch_process(in_dir, '', speed_counter, stats=False)
 
   if plot:
     plt.cla()
     plt.clf()
     fig, ax = plt.subplots()
-    ax.grid(axis='both')
+    #ax.grid(axis='both')
 
-    ax.hist(mean_speed, 40, (0,20), log=True, density=True, edgecolor='gray')
-    ax.set_title('Speed distribution of all flights in the set')
+    ax.hist(mean_speed, 40, (0,20), log=True, density=True, edgecolor='black')
+    #ax.set_title('Speed distribution of all flights in the set')
     ax.set_ylabel('Sample density')
     ax.set_xlabel('Speed m/s')
     ax.set_ylim(0, 1)

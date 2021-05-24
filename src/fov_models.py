@@ -6,12 +6,50 @@ import numpy as np
 import datetime as dt
 
 import src.common as cm
+from src.common import CSTL
+from src.calcs import Calc, Calc_gdop
 from src.d_print import Debug, Enable_Debug, GREEN, RED, VIOLET, CEND
-from decimal import *
+
 
 class FOV_model:
   def __init__(self):
-    self.is_setup = False
+    self.calcs: List[Calc]  = []
+    self.cstls: List[CSTL]  = []
+    self.cstls_initials: List[str] = []
+
+    self.is_setup:  bool    = False
+    self.in_view: Mapping[str, Mapping[str, Tuple[float, float, float]]] = {}
+
+  def __repr__(self) -> str:
+      return f"{self.__str__()} with signature: {self.__sign},"\
+             f" constellations: {self.cstls}, calcs: {self.calcs}"
+
+  def is_in_cstls(self, sat) -> bool:
+    return sat[0] in self.cstls_initials
+
+  def add_cstls(self, cstls: List[cm.CSTL]) -> None:
+    if len(cstls) == 0:
+      raise Exception('Input constellation list cannot be empty.')
+    
+    if cm.CSTL.NONE in cstls:
+      raise Exception('CSTL.NONE cannot be used.')
+
+    self.cstls = cstls
+    self.cstls_initials = [i.value[0] for i in cstls]
+
+  def add_calc(self, calc) -> None:
+    if calc == Calc():
+      raise Exception("Calc cannot be used as a calculation.\
+                        Select an inherited class.")
+
+    if calc not in self.calcs:
+      self.calcs.append(calc)
+
+  def do_calcs(self, sampled_pos):
+    """
+      Perform the calculations based on the FOV model
+    """
+    raise Exception('SubClass.do_calcs() is not defined.')
 
   def __str__(self) -> str:
     """
@@ -19,19 +57,26 @@ class FOV_model:
     """
     raise Exception('SubClass.__str__() is not defined.')
 
+  def __sign(self) -> str:
+    """
+      Return the signature of the class
+    """
+    raise Exception('SubClass.__sign() is not defined.')
+
   def setup(self, **args) -> None:
     """
       Sets the constants and values used for calculating FOV in a model
     """
     raise Exception('SubClass.setup() not defined')
 
-  def required_vars(self) -> List[str]:
+  def required_vars(self) -> set:
     """
       Return the variables required to calculate FOV for a model
     """
     raise Exception('SubClass.required_vars() not defined')
 
-  def get_sats(self, pos_data, sats_data) -> Mapping[str, Mapping[str, Tuple[float, float, float]]]:
+  def get_sats(self, pos_data, sats_data) \
+              -> Mapping[str, Mapping[str, Tuple[float, float, float]]]:
     """
       Return a container with the positions of all
       visible satellites at every given time.\n
@@ -39,53 +84,86 @@ class FOV_model:
     """
     raise Exception('SubClass.get_sats() not defined')
 
-
 class FOV_empty(FOV_model):
+
+  _fovID = 0
+
   def __init__(self):
-      super().__init__()
+    super().__init__()
+
+    # Count class instances
+    self.id = FOV_empty._fovID
+    FOV_empty._fovID += 1      
   
   def __str__(self) -> str:
       return 'FOV_empty'
 
+  def __sign(self) -> str:
+      return f'_empty{str(self.id) if self.id != 0 else ""}'
+
   def setup(self) -> None:
     self.is_setup = True
 
-  def required_vars(self) -> List[str]:
-      return [cm.CHN_LAT, cm.CHN_LON, cm.CHN_ALT, cm.CHN_UTC]
+  def required_vars(self) -> set:
+      return {cm.CHN_LAT, cm.CHN_LON, cm.CHN_ALT, cm.CHN_UTC}
 
-  def get_sats(self, pos_data, sats_data) -> Mapping[str, Mapping[str, Tuple[float, float, float]]]:
+  def get_sats(self, pos_data, sats_data) \
+              -> Mapping[str, Mapping[str, Tuple[float, float, float]]]:
       return super().get_sats(pos_data, sats_data)
 
-
 class FOV_view_match(FOV_model):
-  def __init__(self):
+
+  _fovID = 0
+
+  def __init__(self, cstls: List[CSTL] = []):
     super().__init__()
-    # Model calls setup on init as it needs no additional setup
-    self.setup()
+    self.cstls = []
+
+    if len(cstls) != 0:
+      self.add_cstls(cstls)
+      self.is_setup = True
+
+    # Count class instances
+    self.id = FOV_view_match._fovID
+    FOV_view_match._fovID += 1    
 
   def __str__(self) -> str:
       return 'FOV_view_match'
 
-  def setup(self) -> None:
+  def __sign(self) -> str:
+      return f'_match{str(self.id) if self.id != 0 else ""}'
+
+  def do_calcs(self, sampled_pos):
+    out = {}
+    for i in self.calcs:
+      i.sign = self.__sign()
+      out.update(i.do_calc(sampled_pos, self.in_view))
+    return out
+
+  def setup(self, cstls: List[CSTL] = [CSTL.GPS]) -> None:
     """
-      FOV_view_match model doesn't require any additional setup.\n
-      This method is automatically called on initialization.
+      Constelation that is reportedly seen should be defined here
     """
+    self.add_cstls(cstls)
     self.is_setup = True
 
-  def required_vars(self) -> List[str]:
+  def required_vars(self) -> set:
     """
       Return the variables required to calculate FOV for this model
     """
-    return [cm.CHN_LAT, cm.CHN_LON, cm.CHN_ALT, cm.CHN_UTC, cm.CHN_SAT]
+    return {cm.CHN_LAT, cm.CHN_LON, cm.CHN_ALT, cm.CHN_UTC, cm.CHN_SAT} # TODO: Add variables required from calcs
 
-  def get_sats(self, pos_pos, sats_pos) -> Mapping[str, Mapping[str, Tuple[float, float, float]]]:
+  def get_sats(self, pos_pos, sats_pos) \
+              -> Mapping[str, Mapping[str, Tuple[float, float, float]]]:
     """
       Calculate the satellites in view, given the measured amount of
       visible satellites, at every time and place.
     """
     if not self.is_setup:
       raise Exception(f'{self.__str__} has not been setup')
+
+    Enable_Debug()
+    Debug(1, f'Calculating FOV using: {self.__str__()}')
 
     # Sats pos is ordered like:  times{} -> prn{} = (x,y,z)
 
@@ -104,44 +182,70 @@ class FOV_view_match(FOV_model):
       alt = pos_pos[cm.CHN_ALT][i]
       if lon == '0' or lat == '0':
         raise Exception('Positioning data contains \'0\' values, remove them and retry.')
-      Debug(2,f' lat: {lat}   lon: {lon}   alt: {alt}')
+      Debug(2 ,f' lat: {lat}   lon: {lon}   alt: {alt}')
 
       u = np.array(cm.lla2ecef(lat, lon, alt))
-      u = cm.normalize(u)
+      u = u/np.linalg.norm(u)
 
       dots = {}
-      # Calculate dot prod to all sats
+      # Calculate dot prod to all sats of given constellation
       for sat in sats_pos[t]:
+        if not self.is_in_cstls(sat): continue
         s = np.array(sats_pos[t][sat])
-        s = cm.normalize(s)
-        Debug(2,f'dot: {np.dot(u,s)}  u: {u}  s: {s}  sat: {sat}')
+        s = s/np.linalg.norm(s)
+        Debug(3,f'dot: {np.dot(u,s)}  u: {u}  s: {s}  sat: {sat}')
         dots[np.dot(u,s)] = sat
 
-      # Order in terms of largest abs value
-      ordered = sorted(dots.keys(), key=np.abs, reverse=True)
+      # Order in terms of largest value
+      ordered = sorted(dots.keys(), reverse=True)
 
       # Set the n_s most visible satellites as the ones in FOV
       for j in range(n_s):
         dot = ordered[j]
         sat = dots[dot]
+        Debug(2, f'In view: {GREEN}{sat}{CEND} dot: {dot}')
         sats_LOS[t][sat] = sats_pos[t][sat]
     
     # sats_LOS is ordered like:  times{} -> prn{} = (x,y,z)
+    self.in_view = sats_LOS
     return sats_LOS
 
 class FOV_constant_mask(FOV_model):
-  def __init__(self, mask_angle = cm.NO_MASK):
+
+  _fovID = 0
+
+  def __init__(self, mask_angle = cm.NO_ANGLE, cstls: List[CSTL] = []):
     super().__init__()
+    self.cstls = []
+
+    if len(cstls) != 0:
+      self.add_cstls(cstls)
+
+    # Count class instances
+    self.id = FOV_constant_mask._fovID
+    FOV_constant_mask._fovID += 1    
+
     self.m_a = cm.deg2rad(int(mask_angle)) # Mask angle
     self.th_calc = lambda u, *args: self.__get_threshold(u, *args)
     self.sv2th_calc = lambda s, *args: self.__get_value(s, *args)
-    if mask_angle != cm.NO_MASK:
+
+    if mask_angle != cm.NO_ANGLE and len(cstls) != 0:
       self.is_setup = True
   
   def __str__(self) -> str:
       return 'FOV_constant_mask'
 
-  def setup(self, mask) -> None:
+  def __sign(self) -> str:
+      return f'_constm{str(self.id) if self.id != 0 else ""}'
+
+  def do_calcs(self, sampled_pos):
+    out = {}
+    for i in self.calcs:
+      i.sign = self.__sign()
+      out.update(i.do_calc(sampled_pos, self.in_view))
+    return out
+
+  def setup(self, mask, cstls: List[CSTL] = [CSTL.GPS]) -> None:
     """
       FOV_constant_mask is setup with a specified mask angle (degrees)
     """
@@ -152,17 +256,18 @@ class FOV_constant_mask(FOV_model):
     except:
       raise Exception('Input mask angle must be convertible to int type')
 
-    if self.m_a != cm.deg2rad(cm.NO_MASK):
+    if self.m_a != cm.deg2rad(cm.NO_ANGLE):
       Debug(1,f'Changing mask angle: ({cm.rad2deg(self.m_a)}º) -> ({mask_a}º)')
 
     self.m_a = cm.deg2rad(mask_a)
+    self.cstls = cstls
     self.is_setup = True
 
-  def required_vars(self) -> List[str]:
+  def required_vars(self) -> set:
     """
       Return the variables required to calculate FOV for this model
     """
-    return [cm.CHN_LAT, cm.CHN_LON, cm.CHN_ALT, cm.CHN_UTC]
+    return {cm.CHN_LAT, cm.CHN_LON, cm.CHN_ALT, cm.CHN_UTC}
 
   def __get_threshold(self, u, *args):
     th_a = math.pi/2 - self.m_a  -\
@@ -173,13 +278,17 @@ class FOV_constant_mask(FOV_model):
   def __get_value(self, sat_pos, normalized_u, *args):
     return np.dot(normalized_u, sat_pos/np.linalg.norm(sat_pos))
 
-  def get_sats(self, pos_pos, sats_pos) -> Mapping[str, Mapping[str, Tuple[float, float, float]]]:
+  def get_sats(self, pos_pos, sats_pos) \
+              -> Mapping[str, Mapping[str, Tuple[float, float, float]]]:
     """
       Calculate the satellites in view, given the measured amount of
       visible satellites, at every time and place.
-    """
+    """ 
     if not self.is_setup:
       raise Exception(f'{self.__str__} has not been setup')
+    
+    Enable_Debug()
+    Debug(1, f'Calculating FOV using: {self.__str__()}')
 
     # initialize output map
     sats_LOS = {}
@@ -202,6 +311,7 @@ class FOV_constant_mask(FOV_model):
 
       # Calculate dot prod to all sats
       for sat in sats_pos[t]:
+        if not self.is_in_cstls(sat): continue
         s = np.array(sats_pos[t][sat])
         d = self.sv2th_calc(s, n_u, u)
         if d >= threshold:
@@ -210,10 +320,11 @@ class FOV_constant_mask(FOV_model):
         else:
           Debug(3,f'dot for {sat}: {VIOLET}{d}{CEND}')
 
+    self.in_view = sats_LOS
     return sats_LOS
 
 class FOV_constant_mask_old(FOV_constant_mask):
-  def __init__(self, mask_angle=cm.NO_MASK):
+  def __init__(self, mask_angle=cm.NO_ANGLE):
     super().__init__(mask_angle=mask_angle)
     
   def __str__(self) -> str:
@@ -246,7 +357,6 @@ class FOV_constant_mask_old(FOV_constant_mask):
     th_v = cm.normalize(th_v)
     return np.dot(cm.normalize(u), th_v)
 
-
 class FOV_constant_mask2(FOV_constant_mask):
   def __init__(self):
     super().__init__()
@@ -264,18 +374,49 @@ class FOV_constant_mask2(FOV_constant_mask):
     return math.acos(np.dot(n_u, n))
 
 class FOV_treeline(FOV_model):
-  def __init__(self, max_mask:int = cm.NO_MASK, tree_height:float = 20, min_mask:int = 5):
+
+  _fovID = 0
+
+  def __init__(self,
+              max_mask:int = cm.NO_ANGLE,
+              tree_height:float = 20, 
+              min_mask:int = 5, 
+              cstls: List[CSTL] = []):
     super().__init__()
+    self.cstls = []
+
+    if len(cstls) != 0:
+      self.add_cstls(cstls)
+
+    # Count class instances
+    self.id = FOV_treeline._fovID
+    FOV_treeline._fovID += 1    
+
     self.mx_m_a = cm.deg2rad(max_mask)
     self.tl_h = tree_height
     self.mn_m_a = cm.deg2rad(min_mask)
-    if max_mask != cm.NO_MASK:
+
+    if max_mask != cm.NO_ANGLE and len(cstls) != 0:
       self.is_setup = True
   
   def __str__(self) -> str:
       return 'FOV_treeline'
 
-  def setup(self, max_mask=15, tree_line=20, min_mask:int = 5) -> None:
+  def __sign(self) -> str:
+      return f'_tree{str(self.id) if self.id != 0 else ""}'
+
+  def do_calcs(self, sampled_pos):
+    out = {}
+    for i in self.calcs:
+      i.sign = self.__sign()
+      out.update(i.do_calc(sampled_pos, self.in_view))
+    return out
+
+  def setup(self, 
+            max_mask=15,
+            tree_line=20,
+            min_mask:int = 10, 
+            cstls: List[CSTL] = [CSTL.GPS]) -> None:
     """
       FOV_theoretical_horizon model doesn't require any additional setup.\n
       This method is automatically called on initialization.
@@ -294,7 +435,8 @@ class FOV_treeline(FOV_model):
       raise Exception(f'The MAXimum mask angle ({mask_a})\
          cannot be smaller than the MINimum mask angle ({mask_m})')
 
-    if self.mx_m_a != cm.deg2rad(cm.NO_MASK) and self.mx_m_a != cm.deg2rad(mask_a):
+    if self.mx_m_a != cm.deg2rad(cm.NO_ANGLE) \
+      and self.mx_m_a != cm.deg2rad(mask_a):
       Debug(1,f'Changing max mask angle: ({cm.rad2deg(self.mx_m_a)}º) -> ({mask_a}º)')
 
     self.mx_m_a = cm.deg2rad(mask_a)
@@ -309,25 +451,30 @@ class FOV_treeline(FOV_model):
     except:
       raise Exception('Input tree line height must be convertible to float type')
 
-    if self.mx_m_a != cm.NO_MASK and self.tl_h != tree_h:
+    if self.mx_m_a != cm.NO_ANGLE and self.tl_h != tree_h:
       Debug(1,f'Changing tree line height: ({self.tl_h}m) -> ({tree_h}m)')
       self.tl_h = tree_h
 
+    self.cstls = cstls
     self.is_setup = True
 
-  def required_vars(self) -> List[str]:
+  def required_vars(self) -> set:
     """
       Return the variables required to calculate FOV for this model
     """
-    return [cm.CHN_LAT, cm.CHN_LON, cm.CHN_ALT, cm.CHN_UTC]
+    return {cm.CHN_LAT, cm.CHN_LON, cm.CHN_ALT, cm.CHN_UTC}
 
-  def get_sats(self, pos_pos, sats_pos) -> Mapping[str, Mapping[str, Tuple[float, float, float]]]:
+  def get_sats(self, pos_pos, sats_pos) \
+              -> Mapping[str, Mapping[str, Tuple[float, float, float]]]:
     """
       Calculate the satellites in view, given the measured amount of
       visible satellites, at every time and place.
     """
     if not self.is_setup:
       raise Exception(f'{self.__str__} has not been setup')
+
+    Enable_Debug()
+    Debug(1, f'Calculating FOV using: {self.__str__()}')
 
     # initialize output map
     sats_LOS = {}
@@ -358,7 +505,7 @@ class FOV_treeline(FOV_model):
       z_ax = np.array([0, 0, 1])
       
       u_pz = np.dot(u,z_ax)*z_ax
-      Debug(2,f'u_pz: {u_pz}')
+      Debug(3,f'u_pz: {u_pz}')
       u_pz_mag = np.linalg.norm(u_pz)
 
       u_px = u - u_pz
@@ -370,10 +517,10 @@ class FOV_treeline(FOV_model):
       c = u_px_mag
       d = u_pz_mag  
 
-      Debug(2, f'proj u = {u_px}  {u_pz}') # Coords in our plane
-      Debug(2, f'mags u = {u_px_mag}  {u_pz_mag}') # Coords in our plane
-      Debug(2, f'calc u = {c*u_px + d*u_pz}') # Coords in our plane
-      Debug(2, f'real u = {u}') 
+      Debug(3, f'proj u = {u_px}  {u_pz}') # Coords in our plane
+      Debug(3, f'mags u = {u_px_mag}  {u_pz_mag}') # Coords in our plane
+      Debug(3, f'calc u = {c*u_px + d*u_pz}') # Coords in our plane
+      Debug(3, f'real u = {u}') 
 
       a = float(cm.WGS_A) + i_h
       b = float(cm.WGS_B) + i_h
@@ -397,13 +544,13 @@ class FOV_treeline(FOV_model):
       m1 = math.atan((y1-d)/(x1-c))*180/math.pi
       m2 = math.atan((y2-d)/(x2-c))*180/math.pi
 
-      Debug(0, f'')
-      Debug(2, f'a : {a:>15.0f}\tb : {b:>15.0f}')
-      Debug(2, f'c : {c:>15.0f}\td : {d:>15.0f}')
-      Debug(1, f'x1: {x1:>15.0f}\ty1: {y1:>15.0f}')
-      Debug(2, f'x2: {x2:>15.0f}\ty2: {y2:>15.0f}')
-      Debug(1, f'm1: {m1:>5.10f}\tm2: {m2:>5.10f}')
-      Debug(0, f'lat: {lat} 90-lat: {lat-90}')
+      Debug(3, f'')
+      Debug(3, f'a : {a:>15.0f}\tb : {b:>15.0f}')
+      Debug(3, f'c : {c:>15.0f}\td : {d:>15.0f}')
+      Debug(3, f'x1: {x1:>15.0f}\ty1: {y1:>15.0f}')
+      Debug(3, f'x2: {x2:>15.0f}\ty2: {y2:>15.0f}')
+      Debug(3, f'm1: {m1:>5.10f}\tm2: {m2:>5.10f}')
+      Debug(3, f'lat: {lat} 90-lat: {lat-90}')
 
       tree_line = 20
 
@@ -416,7 +563,8 @@ class FOV_treeline(FOV_model):
 
 
       # Angle of the horizon
-      d_a = math.pi/2 - cm.deg2rad(lat)- cm.deg2rad((np.abs(m2) if under else np.abs(m1))) + mask
+      d_a = math.pi/2 - cm.deg2rad(lat) \
+            - cm.deg2rad((np.abs(m2) if under else np.abs(m1))) + mask
 
       th_a = math.pi/2 - d_a  -\
             math.asin(math.cos(d_a) / cm.NOM_GPS_RAD \
@@ -424,24 +572,25 @@ class FOV_treeline(FOV_model):
 
       threshold = math.cos(th_a) #np.dot(n_u, p_t)
       
-      Debug(0, f'')
-      Debug(1, f'           date: {t}')
-      Debug(1, f'           mask: {cm.rad2deg(mask)}')
-      Debug(1, f'            alt: {alt}')
-      Debug(1, f'Threshold angle: {VIOLET}{cm.rad2deg(th_a):.4f}{CEND}')
-      Debug(1, f'Threshold value: {RED}{threshold:.4f}{CEND}')
+      Debug(3, f'')
+      Debug(3, f'           date: {t}')
+      Debug(3, f'           mask: {cm.rad2deg(mask)}')
+      Debug(3, f'            alt: {alt}')
+      Debug(3, f'Threshold angle: {VIOLET}{cm.rad2deg(th_a):.4f}{CEND}')
+      Debug(3, f'Threshold value: {RED}{threshold:.4f}{CEND}')
 
       # Calculate dot prod to all sats
       for sat in sats_pos[t]:
+        if not self.is_in_cstls(sat): continue
         p_s = np.array(sats_pos[t][sat])
         p_s = p_s/np.linalg.norm(p_s)
         d = np.dot(n_u,p_s)
         if d >= threshold:
           sats_LOS[t][sat] = sats_pos[t][sat]
-          Debug(0,f'dot for {sat}:     {GREEN}{d:.4f}{CEND}')
+          Debug(3,f'dot for {sat}:     {GREEN}{d:.4f}{CEND}')
         else:
-          Debug(2,f'dot for {sat}:     {VIOLET}{d:.4f}{CEND}')
-      Debug(1, f'sats in view: {GREEN}{len(sats_LOS[t])}{CEND}')
+          Debug(3,f'dot for {sat}:     {VIOLET}{d:.4f}{CEND}')
+      Debug(2, f'sats in view: {GREEN}{len(sats_LOS[t])}{CEND}')
 
-
+    self.in_view = sats_LOS
     return sats_LOS
