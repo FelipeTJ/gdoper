@@ -136,7 +136,7 @@ class FOV_view_match(FOV_model):
   def do_calcs(self, sampled_pos):
     out = {}
     for i in self.calcs:
-      i.sign = self.__sign()
+      i.sign += self.__sign()
       out.update(i.do_calc(sampled_pos, self.in_view))
     return out
 
@@ -241,7 +241,7 @@ class FOV_constant_mask(FOV_model):
   def do_calcs(self, sampled_pos):
     out = {}
     for i in self.calcs:
-      i.sign = self.__sign()
+      i.sign += self.__sign()
       out.update(i.do_calc(sampled_pos, self.in_view))
     return out
 
@@ -408,7 +408,7 @@ class FOV_treeline(FOV_model):
   def do_calcs(self, sampled_pos):
     out = {}
     for i in self.calcs:
-      i.sign = self.__sign()
+      i.sign += self.__sign()
       out.update(i.do_calc(sampled_pos, self.in_view))
     return out
 

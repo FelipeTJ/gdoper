@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+from typing import Dict, List
 import matplotlib.pyplot as plt
 import numpy as np
 import time
@@ -8,7 +10,7 @@ import src.reader_pos_data as rps
 import datetime as dt
 import src.common as cm
 
-from src.common import CSTL
+from src.common import CHN_ALT, CHN_LAT, CHN_LON, CSTL, iso_to_dateobj
 from src.calc_manager import CalcManager, ManagerOptions
 from src.fov_models import FOV_constant_mask, FOV_treeline, FOV_view_match
 from src.calcs import Calc_gdop, Calc_wgdop
@@ -37,6 +39,7 @@ def parse_input() -> dict:
 		elif sys.argv[i] == '-f':
 			global skip
 			skip = False
+
 
 def single_gdoper(in_file, in_dir, out_dir):
 
@@ -278,6 +281,130 @@ def default_test(in_file):
   gdoper.set_FOV(FOV_view_match())
   gdoper.add_calc(Calc_gdop())
   gdoper.process_data()
+
+
+@dataclass
+class PlotParams:
+	plot_type: str
+	#required_CHNs: List[str]
+	output_format: str = 'pdf'
+
+
+@dataclass
+class PlotOptions:
+	plot_path: bool = True	# Plot the trajectory that the receiver followed
+	plot_SIV: bool 	= True	# Plot the Satellites in View (SIV) aka SIV and (W)GDOP subplots combined
+	path_opts: PlotParams = PlotParams('path')
+	SIV_opts: PlotParams = PlotParams('SIV')
+
+class Plotter:
+	"""
+		An easy to use interface for obtaining plots after Gdoper processing
+	"""
+
+	def __init__(self, 
+							manager: CalcManager = None,
+							plot_opts: PlotOptions = PlotOptions(),
+							file: str = ''
+							):
+		if manager != None:
+			if not manager.is_setup:
+				raise Exception('CalcManager object must be have processed'\
+												' data before anything can be plotted.')
+
+		self.__mgr = manager
+		self.file = file	# TODO: Implement plotting directly from a file
+
+		self.opts = plot_opts
+		self.figs = {}	# Dict of { plotname: figure_object }, plotname= 'path' or 'SIV'
+		pass
+
+	def __plot_path(self) -> None:
+		samples = self.__mgr.sampled_pos
+		lat = [float(i) for i in samples[CHN_LAT]]
+		lon = [float(i) for i in samples[CHN_LON]]
+		alt = [float(i) for i in samples[CHN_ALT]]
+
+		plt.cla()
+		plt.clf()
+	
+		fig = plt.figure()
+		ax = fig.add_subplot(projection='3d')
+		ax.plot(lat, lon, alt, label='Drone path')
+
+		ax.set_xlabel('Latitude (°)', labelpad=12.0)
+		ax.set_ylabel('Longitude (°)', labelpad=14.0)
+		ax.set_zlabel('Altitude above sea (m)')
+		ax.view_init(elev=30, azim=-55)
+
+		out_dir = self.__mgr.opts.folder_input + '_plots'
+
+		if not os.path.exists(out_dir):
+			os.mkdir(out_dir)
+
+		fn = out_dir + os.sep + self.__mgr.opts.file_iname[:-4] + '_plotPath'
+		fmt = self.opts.path_opts.output_format
+		plt.savefig(fn+f'.{fmt}', format=fmt, bbox_inches='tight')
+		plt.close()
+
+		# TODO: figure out how to store many figures so they can be edited before saving
+		#self.figs['path'] = fig
+		
+
+	def __plot_SIV(self) -> None:
+		for fov in self.__mgr.proc_q:
+			# Convert the utc time of flight to flight duration time (datetime -> seconds)
+			utc = list(fov.in_view.keys())
+			tof = [(iso_to_dateobj(t) - iso_to_dateobj(utc[0])).seconds for t in utc]
+
+			for calc in fov.calcs:
+				chns = calc.get_chn()
+				hdop = calc.last_calc[chns[0]]
+				vdop = calc.last_calc[chns[1]]
+				tdop = calc.last_calc[chns[2]]
+				gdop = calc.last_calc[chns[3]]
+				sats = calc.last_calc[chns[4]]
+
+				fig, (ax1,ax2) = plt.subplots(nrows=2, ncols=1, figsize=(9,8))
+				sat_ticks = range(int(min(sats)), int(max(sats))+2)
+
+				ax1.plot(tof, sats, label=chns[4])
+
+				ax2.plot(tof, hdop, label=chns[0])
+				ax2.plot(tof, vdop, label=chns[1])
+				ax2.plot(tof, tdop, label=chns[2])
+				ax2.plot(tof, gdop, label=chns[3])
+
+				ax1.legend()
+				ax1.set_xlabel('time (s)')
+				ax1.set_ylabel('Number of visible satellites')
+				ax1.set_yticks(range(0,30+2,5))
+				ax1.set_ylim([0, 30])
+
+				ax2.legend()
+				ax2.set_xlabel('time (s)')
+				ax2.set_ylabel('DOP value')
+
+				out_dir = self.__mgr.opts.folder_input + '_plots'
+		
+				if not os.path.exists(out_dir):
+					os.mkdir(out_dir)
+
+				fn = out_dir + os.sep + self.__mgr.opts.file_iname[:-4] + '_plotSIV' + calc.sign
+				fmt = self.opts.path_opts.output_format
+				plt.savefig(f'{fn}.{fmt}', format=fmt, bbox_inches='tight')
+				plt.close()
+		pass
+
+	def do_plots(self):
+		if self.opts.plot_path:
+			self.__plot_path()
+
+		if self.opts.plot_SIV:
+			self.__plot_SIV()
+		
+
+
 
 def plotting_test(in_file, in_dir=cm.POS_DATA_FOLDER, out_dir=cm.POS_DATA_FOLDER, sat_name=cm.CHN_SAT, grid=False, lims=True):
 
