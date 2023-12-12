@@ -1,9 +1,6 @@
 from typing import List, Mapping, Tuple
-from pyproj import Transformer
 import numpy as np
-import datetime as dt
-
-import common as c
+from common import *
 
 
 class FOV_model:
@@ -48,7 +45,7 @@ class FOV_view_match(FOV_model):
         """
         Return the variables required to calculate FOV for this model
         """
-        return [c.CHN_LAT, c.CHN_LON, c.CHN_ALT, c.CHN_UTC, c.CHN_SAT]
+        return [CHN_LAT, CHN_LON, CHN_ALT, CHN_UTC, CHN_SAT]
 
     def get_sats(self, pos_pos, sats_pos) -> Mapping[str, Mapping[str, Tuple[float, float, float]]]:
         """
@@ -59,19 +56,19 @@ class FOV_view_match(FOV_model):
 
         # initialize output map
         sats_LOS = {}
-        for t in pos_pos[c.CHN_UTC]:
+        for t in pos_pos[CHN_UTC]:
             sats_LOS[t] = {}
 
         # Calculate best visible sats
-        for i in range(len(pos_pos[c.CHN_UTC])):
-            t = pos_pos[c.CHN_UTC][i]  # Timestamps from pos_data
-            n_s = int(pos_pos[c.CHN_SAT][i])  # n. of visible sats at 't'
+        for i in range(len(pos_pos[CHN_UTC])):
+            t = pos_pos[CHN_UTC][i]  # Timestamps from pos_data
+            n_s = int(pos_pos[CHN_SAT][i])  # n. of visible sats at 't'
 
-            lat = pos_pos[c.CHN_LAT][i]
-            lon = pos_pos[c.CHN_LON][i]
-            alt = pos_pos[c.CHN_ALT][i]
+            lat = pos_pos[CHN_LAT][i]
+            lon = pos_pos[CHN_LON][i]
+            alt = pos_pos[CHN_ALT][i]
 
-            u = np.array(c.lla2ecef(lat, lon, alt))
+            u = np.array(lla2ecef(lat, lon, alt))
             u = u / np.linalg.norm(u)
 
             dots = {}
