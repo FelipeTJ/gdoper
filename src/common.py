@@ -1,12 +1,15 @@
 from pyproj.transformer import Transformer
+from pathlib import Path
 import datetime as d
 import typing as t
 import os
 
-BASE_FOLDER = os.path.dirname(os.path.abspath(__file__) )[:-4]
-RINEX_FOLDER = BASE_FOLDER + os.sep + 'rinex_files'
-POS_DATA_FOLDER = BASE_FOLDER + os.sep + 'test_data'
+BASE_FOLDER = Path(__file__).resolve().parent.parent
+RINEX_FOLDER = Path(BASE_FOLDER / 'rinex_files')
+POS_DATA_FOLDER = Path(BASE_FOLDER / 'test_data')
 
+if not os.path.isdir(RINEX_FOLDER):
+    os.mkdir(RINEX_FOLDER)
 
 # WGS84 constants
 # TODO: put them here?

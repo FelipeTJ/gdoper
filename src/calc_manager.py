@@ -17,17 +17,19 @@
 # %%
 from typing import Dict, Mapping, List
 from xarray import DataArray
+from pandas import DataFrame
 from csv import writer
+from pathlib import Path
 import datetime as dt
 import time
 
 
-import src.common as c
-import src.reader_rinex as rr
-import src.reader_pos_data as rpc
-from src.fov_models import FOV_model, FOV_view_match
-from src.calcs import Calc, Calc_gdop
-from src.d_print import Debug, Info
+from common import RINEX_FOLDER, POS_DATA_FOLDER, CHN_UTC
+import reader_rinex as rr
+import reader_pos_data as rpc
+from fov_models import FOV_model, FOV_view_match
+from calcs import Calc, Calc_gdop
+from d_print import Debug, Info
 
 
 
@@ -35,9 +37,9 @@ from src.d_print import Debug, Info
 class Calc_manager:
   def __init__(self, in_file,
               out_file = '',
-              rinex_folder = c.RINEX_FOLDER,
-              data_folder = c.POS_DATA_FOLDER,
-              out_folder = c.POS_DATA_FOLDER,
+              rinex_folder = RINEX_FOLDER,
+              data_folder = POS_DATA_FOLDER,
+              out_folder = POS_DATA_FOLDER,
               ts = 5):
 
     # Sampling period
@@ -53,7 +55,7 @@ class Calc_manager:
     self.output_file = (in_file[:-4] + '_gdoper.csv' if out_file == '' else out_file)
 
     # Objects
-    self.pos_obj = rpc.Pos_data(self.pdata_dir + self.input_file)
+    self.pos_obj = rpc.Pos_data(str(self.pdata_dir) + self.input_file)
     self.sat_obj = rr.Orbital_data()
     self.fov_obj = FOV_model()      # real obj created in setup_FOV()
     self.calcs_q: List[Calc] = []   # A queue for calculations
@@ -126,7 +128,7 @@ class Calc_manager:
     last_saved =  dt.datetime.fromisoformat(self.pos_obj.get_first_utc()) - dif
 
     for i in range(all_pos_row_count):
-      t = dt.datetime.fromisoformat(all_pos[c.CHN_UTC][i])  # TODO: use proper name for utc
+      t = dt.datetime.fromisoformat(all_pos[CHN_UTC][i])  # TODO: use proper name for utc
 
       if t-last_saved >= dif:
 
@@ -189,21 +191,8 @@ class Calc_manager:
       File name is "self.out_dir + self.output_file"
     """
 
-    fn = self.out_dir + self.output_file
-    map_keys = self.ordered_keys
-    row_count = len(self.output_map[map_keys[0]])
-
-    with open(fn, 'w') as csvfile:
-      wr = writer(csvfile)
-      wr.writerow(map_keys)
-
-      for row in range(row_count):
-        temp = []
-        for col in map_keys:
-          temp.append(self.output_map[col][row])
-
-        wr.writerow(temp) 
-
+    fn = str(self.out_dir) + self.output_file
+    DataFrame(self.output_map).to_csv(fn, index=False)
 
   def process_data(self):
     """
@@ -227,7 +216,7 @@ class Calc_manager:
 
     now = time.perf_counter()
     Debug(f'Aquiring satellite info...')
-    all_sats = self.__acquire_sats(pos[c.CHN_UTC]) # TODO: make CHNs more flexible
+    all_sats = self.__acquire_sats(pos[CHN_UTC]) # TODO: make CHNs more flexible
     #Debug(f'Done. {time.perf_counter()-now:.3f}s\n')
 
     now = time.perf_counter()

@@ -5,3 +5,4 @@ test_data*
 __pycache*
 
 venv_gdoper
+sso_tokens.json

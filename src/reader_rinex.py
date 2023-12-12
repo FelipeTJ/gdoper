@@ -15,7 +15,6 @@
 
 #%%
 
-import xarray as xr
 from xarray.core.dataarray import DataArray
 from xarray.core.dataset import Dataset
 from typing import Mapping, List, Tuple
@@ -27,11 +26,12 @@ import typing as t
 import wget as wget
 import time
 import os
+
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-import src.common as c
-import src.unavco_stations as s
-from src.d_print import Print, Debug
+import common as c
+from d_print import Print, Debug
+from unavco.earthscope import get_earthscope_rinex
 
 # TODO: create directory if it doesn't exist
 # Directory where downloaded rinex files are stored 
@@ -88,7 +88,7 @@ class Satellite:
 
     ecef = gr.keplerian.keplerian2ecef(close_nav)
 
-    da = xr.DataArray(list(ecef), dims=['space', 'time'], coords=[['x','y','z'], times])
+    da = DataArray(list(ecef), dims=['space', 'time'], coords=[['x','y','z'], times])
 
     return da
 
@@ -152,7 +152,7 @@ class Orbital_data:
 
     self.done_setup = True
 
-    self.filedir_remote = self.get_remote_dir()
+    self.filedir_remote = 'DEPRECATED' # self.get_remote_dir()
     self.filedir_local = self.get_file()
     self.read_rinex()
 
@@ -165,7 +165,7 @@ class Orbital_data:
   def change_station(self, new_station: str):
     self.station = new_station
     self.rinex_file = f'{self.station}{self.gps_day}0.{self.gps_year}n.Z'
-    self.filedir_remote = self.get_remote_dir()
+    self.filedir_remote = 'DEPRECATED' # self.get_remote_dir()
     self.filedir_local = f'{c.RINEX_FOLDER}/{self.rinex_file}'
     self.is_file_available = False
 
@@ -175,13 +175,6 @@ class Orbital_data:
     self.gps_day = (self.utc - dt.datetime(self.utc.year, 1, 1)).days + 1  # Adjust for date
     self.utc = dt.date(self.utc.year, self.utc.month, self.utc.day)
     self.change_station(self.station) # Update all filenames and directories
-
-  def get_remote_dir(self) -> str:
-    """
-    Based on the date, return a string corresponding to the location
-    of the station data in the remote file repository.
-    """  
-    return f'{s.get_nav()}20{self.gps_year}/{self.gps_day}/' + self.rinex_file
 
   def local_file_exists(self) -> bool:
     self.setup_check()
@@ -214,21 +207,8 @@ class Orbital_data:
         if tries >= DL_MAX_TRIES:
           raise Exception(f'Maximum download request attempts ({DL_MAX_TRIES}) reached.')
 
-        url = f'ftp://{s.get_url()}{self.filedir_remote}'
-        out = f'{c.RINEX_FOLDER}/{self.rinex_file}'
-
-        Print('debug', f'Remote URL: {url}')
-        Print('debug', f'Local dir: {out}')
-
         tries = tries+1
-        try:
-          file = wget.download(url, out)
-          if file == out:
-            Print('info', f'File downloaded successfully: {out}')
-          downloaded = True
-        
-        except:
-          Print('info', f'Unable to download file: {url}')
+        downloaded = get_earthscope_rinex(self.rinex_file)
     
     self.is_file_available = True
     return f'{c.RINEX_FOLDER}/{self.rinex_file}'
