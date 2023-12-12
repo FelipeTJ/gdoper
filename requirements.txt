@@ -1,0 +1,5 @@
+georinex
+unlzw3
+pyproj
+xarray
+earthscope-sdk

@@ -7,11 +7,26 @@ Gdoper provides an easy to use interface for processing positioning related data
 For example, a file containing the flight trajectory of a drone is input. The GPS Ephemeris for the day of the flight is downloaded locally and pre-processed. It is now available for further processing.
 
 ## Usage
-The following libraries must be installed for Gdoper to work:
-- georinex
-- unlzw3
-- pyproj
-- wget
+It is recommended to use a virtual environment for this package:
+```
+python -m venv venv_gdoper
+```
+
+Activate the venv (Windows):
+```
+& .\venv_gdoper\bin\Activate.ps1
+```
+
+Activate the venv (Linux):
+```
+. ./venv_gdoper/activate
+```
+
+install the requirements:
+```
+pip install -r requirements.txt
+```
+
 
 Note:
 The program has only been tested with Python 3.8.5
