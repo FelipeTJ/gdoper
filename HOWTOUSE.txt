@@ -1,0 +1,4 @@
+I've installed earthscope-cli, so to make sure I'm logged in on this devide I just need to do this:
+- in cmd: es login
+- follow procedure
+Then, code can be executed
