@@ -6,8 +6,9 @@ from pathlib import Path
 from re import search
 
 # https://gitlab.com/earthscope/public/earthscope-sdk
-from earthscope_sdk.auth.device_code_flow import DeviceCodeFlowSimple
-from earthscope_sdk.auth.auth_flow import NoTokensError
+from earthscope_sdk.auth.device_code_flow import DeviceCodeFlow
+from earthscope_sdk.common.context import SdkContext
+from earthscope_sdk.config.settings import SdkSettings
 
 
 UNAVCO_DIR = Path(__file__).resolve().parent
@@ -25,6 +26,9 @@ from common import RINEX_FOLDER
 # if you want to keep the default name, set the path to a directory. Include a file name to rename.
 token_path = UNAVCO_DIR
 
+# loads settings via loading chain
+settings = SdkSettings()
+
 
 def get_earthscope_rinex(station_rinex_file: str, save_dir: str = RINEX_FOLDER) -> bool:
     matches = search(r"(\d\d\d)0\.(\d\d)(n|e|g)\.Z", station_rinex_file)
@@ -37,13 +41,9 @@ def get_earthscope_rinex(station_rinex_file: str, save_dir: str = RINEX_FOLDER) 
     station_rinex_file = Path(req_path).name
 
     # instantiate the device code flow subclass
-    device_flow = DeviceCodeFlowSimple(Path(token_path))
-    try:
-        # get access token from local path
-        device_flow.get_access_token_refresh_if_necessary()
-    except NoTokensError:
-        # if no token was found locally, do the device code flow
-        device_flow.do_flow()
+    device_flow = DeviceCodeFlow(SdkContext(settings))
+    # Do the device code flow directly
+    device_flow.do_flow()
     token = device_flow.access_token
 
     r = requests.get(req_path, headers={"authorization": f"Bearer {token}"})
