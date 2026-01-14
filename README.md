@@ -35,13 +35,18 @@ install the requirements:
 pip install -r requirements.txt
 ```
 
+Connect to the Earthscope SDK by logging in through the browser with the provided link
+```
+python src/unavco/earthscope.py
+```
 
-Note: The program has only been tested with Python 3.8.5
+
+Note: The program has only been tested with Python 3.8.5 and 3.12.3
 
 Positioning data is by default stored in a directory named 'test_data', located
 in the same directory as the 'gdoper.py' file.
 
-Satellite data is by default stored in a file names 'rinex_files', which is also
+Satellite data is by default stored in a directory named 'rinex_files', which is also
 located in the same directory as the 'gdoper.py' file. This folder and its
 contents are created automatically as the program downloads satellite data
 (rinex files).

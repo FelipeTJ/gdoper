@@ -42,8 +42,11 @@ def get_earthscope_rinex(station_rinex_file: str, save_dir: str = RINEX_FOLDER) 
 
     # instantiate the device code flow subclass
     device_flow = DeviceCodeFlow(SdkContext(settings))
+
     # Do the device code flow directly
-    device_flow.do_flow()
+    with device_flow.do_flow() as codes:
+        print(f"To authenticate, visit {codes.verification_uri_complete}")
+
     token = device_flow.access_token
 
     r = requests.get(req_path, headers={"authorization": f"Bearer {token}"})

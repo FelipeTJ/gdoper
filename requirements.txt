@@ -3,3 +3,5 @@ unlzw3
 pyproj
 xarray
 earthscope-sdk
+wget
+requests
